@@ -95,7 +95,7 @@ def json_gen(args) -> Iterator[tuple[int, bytes, int]]:
 
                 # use real timestamp if --real-ts arg was provided
                 if args.real_ts:
-                    timestamp = time.time_ns() / 1000
+                    timestamp = time.time_ns() // 1000
 
                 # yield values to outer loop
                 yield channel, data.encode(), timestamp

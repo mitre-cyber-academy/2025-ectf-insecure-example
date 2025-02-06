@@ -144,7 +144,7 @@ def parse_args():
 
     encode_parser = subparsers.add_parser("encode", help="Test the encoder")
     encode_parser.set_defaults(tester=test_encoder)
-    encode_parser.set_defaults(threshold=1_000.0)
+    encode_parser.set_defaults(threshold=64_000.0)
     encode_parser.add_argument(
         "secrets", type=argparse.FileType("rb"), help="Path to the secrets file"
     )
@@ -157,7 +157,7 @@ def parse_args():
 
     decode_parser = subparsers.add_parser("decode", help="Test the decoder")
     decode_parser.set_defaults(tester=test_decoder)
-    decode_parser.set_defaults(threshold=100.0)
+    decode_parser.set_defaults(threshold=640.0)
     decode_parser.add_argument(
         "port",
         help="Serial port to the Decoder (See https://rules.ectf.mitre.org/2025/getting_started/boot_reference for platform-specific instructions)",
