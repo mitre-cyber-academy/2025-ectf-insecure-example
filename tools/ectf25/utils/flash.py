@@ -76,7 +76,7 @@ class BootloaderIntf:
         # Send image and verify each block
         logger.info("Update started")
         logger.info("Sending image data...")
-        for idx in trange(0, self.TOTAL_SIZE, self.BLOCK_SIZE):
+        for idx in trange(0, len(image), self.BLOCK_SIZE):
             self.ser.write(image[idx : idx + self.BLOCK_SIZE])
             self._verify_resp()
 
