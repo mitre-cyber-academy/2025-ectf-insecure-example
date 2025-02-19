@@ -1,6 +1,6 @@
 # FIU eCTF 25' Installation Instructions
 
-## Layout
+## Layout s
 
 - `decoder/` - Firmware for the television decoder.
     - `project.mk` - This file defines project specific variables included in the Makefile
