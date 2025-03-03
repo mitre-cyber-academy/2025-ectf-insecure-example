@@ -1,0 +1,39 @@
+name: Auto Team Mentions
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  mention_team:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check issue labels
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(label => label.name);
+            let mention = "";
+
+            // Define label-to-team mappings
+            if (labels.includes("Blue Team")) {
+              mention = "@CryptoCaballeros/blue-team";
+            } else if (labels.includes("Red Team")) {
+              mention = "@CryptoCaballeros/red-team";
+            } else if (labels.includes("Developers")) {
+              mention = "@CryptoCaballeros/developers";
+            } else if (labels.includes("Everyone")) {
+              mention = "@CryptoCaballeros/everyone";
+            } else if (labels.include("Researchers")) {
+              mention = "@CryptoCaballeros/researchers"
+            }
+
+            if (mention) {
+              github.rest.issues.createComment({
+                issue_number: issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `🔔 Hey ${mention}, this issue needs your attention!`
+              });
+            }
