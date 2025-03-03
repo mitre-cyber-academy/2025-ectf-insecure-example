@@ -337,4 +337,4 @@ cython_debug/
 msdk/
 *.secrets
 *.subscription
-.github/workflows
+.github/workflows/
