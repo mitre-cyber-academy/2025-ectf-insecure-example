@@ -337,4 +337,3 @@ cython_debug/
 msdk/
 *.secrets
 *.subscription
-.github/
