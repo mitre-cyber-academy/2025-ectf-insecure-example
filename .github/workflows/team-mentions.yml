@@ -29,24 +29,27 @@ jobs:
             if (labels.includes("Everyone")) {
               mentions.push("@CryptoCaballeros/everyone");
             }
-            if (labels.includes("Researchers")) { // FIXED TYPO HERE
+            if (labels.includes("Researchers")) {
               mentions.push("@CryptoCaballeros/researchers");
             }
 
-             const comments = await github.rest.issues.listComments({
+            // Get comments and check if a mention has already been posted
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number
+            });
+
+            // Skip posting if a comment with the mention already exists
+            const alreadyMentioned = comments.data.some(comment => comment.body.includes("this issue needs your attention!"));
+
+            // Only post the comment if it hasn't been posted yet
+            if (!alreadyMentioned && mentions.length > 0) {
+              const mentionText = mentions.join(" ");
+              await github.rest.issues.createComment({
+                issue_number: issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issue.number
+                body: `🔔 Hey ${mentionText}, this issue needs your attention!`
               });
-              
-              const alreadyMentioned = comments.data.some(comment => comment.body.includes("this issue needs your attention!"));
-              
-              if (!alreadyMentioned && mentions.length > 0) {
-                const mentionText = mentions.join(" ");
-                github.rest.issues.createComment({
-                  issue_number: issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: `🔔 Hey ${mentionText}, this issue needs your attention!`
-                });
-              }
+            }
