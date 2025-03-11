@@ -36,8 +36,11 @@ class Encoder:
         self.some_secrets = secrets["some_secrets"]
 
     def userarray(self):
-        # Variables for user array
+        """
+        User Aunthentication Function
+        """
 
+        # Variables for user array
         authenticated = False  # boolean to check authentication of attempted user
         username = ""  # String for attempted user
         password = ""  # String for attempted password

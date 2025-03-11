@@ -129,10 +129,18 @@ def test_decoder(args):
 def parse_args():
     parser = argparse.ArgumentParser(prog="ectf25.dev.stress_test")
     parser.add_argument(
-        "--frame-size", "-f", default=64, type=int, help="Size of frame"
+        "--frame-size", 
+        "-f", 
+        default=64, 
+        type=int, 
+        help="Size of frame"
     )
     parser.add_argument(
-        "--test-size", "-t", default=100000000, type=int, help="Bytes to process"
+        "--test-size", 
+        "-t", 
+        default=100000000, 
+        type=int, 
+        help="Bytes to process"
     )
     parser.add_argument(
         "--channels",
@@ -149,7 +157,9 @@ def parse_args():
     encode_parser.set_defaults(tester=test_encoder)
     encode_parser.set_defaults(threshold=64_000.0)
     encode_parser.add_argument(
-        "secrets", type=argparse.FileType("rb"), help="Path to the secrets file"
+        "secrets", 
+        type=argparse.FileType("rb"), 
+        help="Path to the secrets file"
     )
     encode_parser.add_argument(
         "--dump",

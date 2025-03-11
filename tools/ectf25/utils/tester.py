@@ -132,9 +132,17 @@ def parse_args():
         help="Serial port to the Decoder (See https://rules.ectf.mitre.org/2025/getting_started/boot_reference for platform-specific instructions)",
     )
     parser.add_argument(
-        "--delay", "-d", type=float, default=0, help="Delay after frame decoding"
+        "--delay", 
+        "-d", 
+        type=float, 
+        default=0, 
+        help="Delay after frame decoding"
     )
-    parser.add_argument("--perf", action="store_true", help="Display performance stats")
+    parser.add_argument(
+        "--perf", 
+        action="store_true", 
+        help="Display performance stats"
+    )
     parser.add_argument(
         "--stub-encoder",
         action="store_true",
@@ -146,22 +154,37 @@ def parse_args():
         help="Stub out decoder and print decoded frames",
     )
     parser.add_argument(
-        "--dump-raw", type=Path, default=None, help="Dump raw frames to a file"
+        "--dump-raw", 
+        type=Path, 
+        default=None, 
+        help="Dump raw frames to a file"
     )
     parser.add_argument(
-        "--dump-encoded", type=Path, default=None, help="Dump encoded frames to a file"
+        "--dump-encoded", 
+        type=Path, 
+        default=None, 
+        help="Dump encoded frames to a file"
     )
     parser.add_argument(
-        "--dump-decoded", type=Path, default=None, help="Dump decoded frames to a file"
+        "--dump-decoded", 
+        type=Path, 
+        default=None, 
+        help="Dump decoded frames to a file"
     )
     subparsers = parser.add_subparsers(required=True)
 
     # subparser for stdin frame generator (no arguments)
-    parser_stdin = subparsers.add_parser("stdin", help="Read frames from stdin")
+    parser_stdin = subparsers.add_parser(
+        "stdin", 
+        help="Read frames from stdin"
+    )
     parser_stdin.set_defaults(frame_generator=stdin_gen)
 
     # subparser and arguments for the random frame generator
-    parser_rand = subparsers.add_parser("rand", help="Generate random frames")
+    parser_rand = subparsers.add_parser(
+        "rand", 
+        help="Generate random frames"
+    )
     parser_rand.set_defaults(frame_generator=rand_gen)
     parser_rand.add_argument(
         "--ascii",
@@ -185,7 +208,11 @@ def parse_args():
         help="Channels to randomly chose from (NOTE: 0 is broadcast)",
     )
     parser_rand.add_argument(
-        "--frame-size", "-f", type=int, default=64, help="Size (in bytes) of frame"
+        "--frame-size", 
+        "-f", 
+        type=int, 
+        default=64, 
+        help="Size (in bytes) of frame"
     )
 
     # subparser and arguments for json frame generator
@@ -194,12 +221,20 @@ def parse_args():
         help="Read frames from a json file like [[channel, frame, timestamp], ...]",
     )
     parser_json.set_defaults(frame_generator=json_gen)
-    parser_json.add_argument("file", type=argparse.FileType("r"), help="Path to json")
     parser_json.add_argument(
-        "--real-ts", action="store_true", help="Use live timestamps instead of input"
+        "file", 
+        type=argparse.FileType("r"), 
+        help="Path to json"
     )
     parser_json.add_argument(
-        "--loop", action="store_true", help="Loop at end of json source"
+        "--real-ts", 
+        action="store_true", 
+        help="Use live timestamps instead of input"
+    )
+    parser_json.add_argument(
+        "--loop", 
+        action="store_true", 
+        help="Loop at end of json source"
     )
     args = parser.parse_args()
 

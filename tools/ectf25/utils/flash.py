@@ -92,11 +92,18 @@ class BootloaderIntf:
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="ectf25.utils.flash")
-    parser.add_argument(
-        "infile", type=argparse.FileType("rb"), help="Path to the input binary"
+    parser = argparse.ArgumentParser(
+        prog="ectf25.utils.flash"
     )
-    parser.add_argument("port", help="Serial port")
+    parser.add_argument(
+        "infile", 
+        type=argparse.FileType("rb"), 
+        help="Path to the input binary"
+    )
+    parser.add_argument(
+        "port", 
+        help="Serial port"
+    )
     args = parser.parse_args()
 
     image = args.infile.read()

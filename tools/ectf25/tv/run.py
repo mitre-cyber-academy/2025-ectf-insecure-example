@@ -22,8 +22,15 @@ def main():
         description="Run the TV, pulling frames from the satellite, decoding using"
         " the Decoder, and printing to the terminal",
     )
-    parser.add_argument("sat_host", help="TCP host of the satellite")
-    parser.add_argument("sat_port", type=int, help="TCP port of the satellite")
+    parser.add_argument(
+        "sat_host", 
+        help="TCP host of the satellite"
+    )
+    parser.add_argument(
+        "sat_port", 
+        type=int, 
+        help="TCP port of the satellite"
+    )
     parser.add_argument(
         "dec_port",
         help="Serial port to the Decoder (see https://rules.ectf.mitre.org/2025/getting_started/boot_reference for platform-specific instructions)",

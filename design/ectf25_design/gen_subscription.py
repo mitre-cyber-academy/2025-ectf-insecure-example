@@ -40,7 +40,7 @@ def gen_subscription(
     # You can use secrets generated using `gen_secrets` here like:
     # secrets["some_secrets"]
     # Which would return "EXAMPLE" in the reference design.
-    # Please note that the secrets are READ ONLY at this sage!
+    # Please note that the secrets are READ ONLY at this stage!
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
     return struct.pack("<IQQI", device_id, start, end, channel)
@@ -63,15 +63,31 @@ def parse_args():
         type=argparse.FileType("rb"),
         help="Path to the secrets file created by ectf25_design.gen_secrets",
     )
-    parser.add_argument("subscription_file", type=Path, help="Subscription output")
     parser.add_argument(
-        "device_id", type=lambda x: int(x, 0), help="Device ID of the update recipient."
+        "subscription_file", 
+        type=Path,
+        help="Subscription output"
     )
     parser.add_argument(
-        "start", type=lambda x: int(x, 0), help="Subscription start timestamp"
+        "device_id", 
+        type=lambda x: int(x, 0), 
+        help="Device ID of the update recipient."
     )
-    parser.add_argument("end", type=int, help="Subscription end timestamp")
-    parser.add_argument("channel", type=int, help="Channel to subscribe to")
+    parser.add_argument(
+        "start", 
+        type=lambda x: int(x, 0), 
+        help="Subscription start timestamp"
+    )
+    parser.add_argument(
+        "end", 
+        type=int, 
+        help="Subscription end timestamp"
+    )
+    parser.add_argument(
+        "channel", 
+        type=int, 
+        help="Channel to subscribe to"
+    )
     return parser.parse_args()
 
 

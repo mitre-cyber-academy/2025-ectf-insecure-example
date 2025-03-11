@@ -21,8 +21,15 @@ async def main():
     parser.add_argument(
         "secrets", type=argparse.FileType("rb"), help="Path to the secrets file"
     )
-    parser.add_argument("host", help="TCP hostname to serve on")
-    parser.add_argument("port", type=int, help="TCP port to serve on")
+    parser.add_argument(
+        "host", 
+        help="TCP hostname to serve on"
+    )
+    parser.add_argument(
+        "port", 
+        type=int, 
+        help="TCP port to serve on"
+    )
     parser.add_argument(
         "channels",
         nargs="+",
