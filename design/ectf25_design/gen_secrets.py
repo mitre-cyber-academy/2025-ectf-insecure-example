@@ -29,15 +29,26 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
+    
     # TODO: Update this function to generate any system-wide secrets needed by
     #   your design
+    import os
+
+    # Key created for encrypting frames in encoder;
+    # random 32 byte value is converted to hex (64 digits)
+    encryption_key = os.urandom(32).hex();
+
+    # Key created for subscription signing or other subscription securing work;
+    # random 32 byte value is converted to hex (64 digits)
+    subscription_key = os.urandom(32).hex();
 
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
     secrets = {
         "channels": channels,
-        "some_secrets": "EXAMPLE",
+        "encryption_Key": encryption_key,
+        "subscription_Key": subscription_key,
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
