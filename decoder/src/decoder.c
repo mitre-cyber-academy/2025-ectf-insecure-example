@@ -157,7 +157,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     //ensure timestamp is increasing monotonically
     if (timestamp <= prev_frame_timestamp) {
         STATUS_LED_ERROR();
-        print_error("Timestamp invalid - non-monotonic.")
+        print_error("Timestamp invalid - non-monotonic.");
         return -1;
     }
 
@@ -169,7 +169,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
             }
             else {
                 STATUS_LED_ERROR();
-                print_error("Timestamp invalid - outside of subscription window.")
+                print_error("Timestamp invalid - outside of subscription window.");
                 return -1;
             }
         }
@@ -299,7 +299,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
 }
 
 /** @brief Initializes peripherals for system boot.
-*/git 
+*/
 void init() {
     int ret;
 
