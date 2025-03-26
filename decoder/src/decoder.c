@@ -154,11 +154,23 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
+    //ensure timestamp is increasing monotonically
+    if (timestamp <= prev_frame_timestamp) {
+        STATUS_LED_ERROR();
+        print_error("Timestamp invalid - non-monotonic.")
+        return -1;
+    }
+
     // Check if the timestamp is within the subscription window
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == channel) {
             if (decoder_status.subscribed_channels[i].start_timestamp <= timestamp && decoder_status.subscribed_channels[i].end_timestamp >= timestamp) {
                 return 1;
+            }
+            else {
+                STATUS_LED_ERROR();
+                print_error("Timestamp invalid - outside of subscription window.")
+                return -1;
             }
         }
     }
