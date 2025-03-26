@@ -117,7 +117,7 @@ typedef struct {
 flash_entry_t decoder_status;
 
 //previous frame timestamp for timestamp validation
-timestamp_t prev_frame_timestamp = -1;
+timestamp_t prev_frame_timestamp = 0;
 
 
 /**********************************************************
@@ -278,12 +278,12 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     print_debug("Checking subscription\n");
     if (is_subscribed(channel)) {
         print_debug("Subscription Valid\n");
+        print_debug("Checking timestamp\n");
         if (timestamp_valid(timestamp, channel)) {
             print_debug("Timestamp Valid\n");
             prev_frame_timestamp = timestamp;
         } else {
-            STATUS_LED_RED();
-            printf("Timestamp invalid.");
+            //timestamp errors are printed in timestamp_valid()
             return -1;
         }
         write_packet(DECODE_MSG, new_frame->data, frame_size);
