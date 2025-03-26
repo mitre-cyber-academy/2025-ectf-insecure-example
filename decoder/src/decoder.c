@@ -295,7 +295,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     } else {
 
         //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
-        MXC_Delay(MAXC_DELAY_MSEC(5000));
+        MXC_Delay(MXC_DELAY_MSEC(5000));
         
         STATUS_LED_RED();
         sprintf(
