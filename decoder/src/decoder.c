@@ -158,7 +158,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     if (timestamp <= prev_frame_timestamp) {
         STATUS_LED_ERROR();
         print_error("Timestamp invalid - non-monotonic.");
-        return -1;
+        return 0;
     }
 
     // Check if the timestamp is within the subscription window
@@ -170,11 +170,10 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
             else {
                 STATUS_LED_ERROR();
                 print_error("Timestamp invalid - outside of subscription window.");
-                return -1;
+                return 0;
             }
         }
     }
-    return 0;
 }
 
 
