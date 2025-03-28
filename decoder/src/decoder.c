@@ -157,7 +157,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     }
     //ensure timestamp is increasing monotonically
     if (timestamp <= prev_frame_timestamp) {
-        //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
+        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         print_error("Timestamp invalid - non-monotonic.");
@@ -171,7 +171,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
                 return 1;
             }
             else {
-                //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
+                //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
                 MXC_Delay(MXC_DELAY_MSEC(5000));
                 STATUS_LED_ERROR();
                 print_error("Timestamp invalid - outside of subscription window.");
