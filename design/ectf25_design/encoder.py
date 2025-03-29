@@ -33,7 +33,7 @@ class Encoder:
 
         # Load the example secrets for use in Encoder.encode
         # This will be "EXAMPLE" in the reference design"
-        self.some_secrets = secrets["some_secrets"]
+        # self.some_secrets = secrets["some_secrets"]
 
     def userarray(self):
         """
@@ -45,11 +45,14 @@ class Encoder:
         username = ""  # String for attempted user
         password = ""  # String for attempted password
         userinput = ""  # Users input
-        users = array(["admin","william_kendrick_coleman","animegirl_lover.05"], ["admin", "TheDangersInMyHeart524!", ""])
+        users = array(
+            ["admin", "william_kendrick_coleman", "animegirl_lover.05"],
+            ["admin", "TheDangersInMyHeart524!", ""],
+        )
 
         while not authenticated:
 
-            #User Inputs
+            # User Inputs
             print("Enter Username:")
             userinput = input()
             username = userinput
@@ -60,23 +63,15 @@ class Encoder:
             # Reference with Database
             for i in range(users.list):
 
-
-                if (
-                   username == users(0,i)
-                   and
-                   password == users(1,i)
-               ):
+                if username == users(0, i) and password == users(1, i):
                     print("Success")
                     authenticated = True
                     time.sleep(5)
 
-            #TODO Add interface for authenticated users into user pass
-            #TODO Add preventions in "else" to mitigate injections
-
-
+            # TODO Add interface for authenticated users into user pass
+            # TODO Add preventions in "else" to mitigate injections
 
         return ()
-
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function
@@ -99,9 +94,7 @@ class Encoder:
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
 
-
         return struct.pack("<IQ", channel, timestamp) + frame
-
 
 
 def main():
@@ -112,27 +105,14 @@ def main():
     After pip-installing, you should be able to call this with:
         python3 -m ectf25_design.encoder path/to/test.secrets 1 "frame to encode" 100
     """
-        
+
     parser = argparse.ArgumentParser(prog="ectf25_design.encoder")
     parser.add_argument(
-        "secrets_file", 
-        type=argparse.FileType("rb"), 
-        help="Path to the secrets file"
+        "secrets_file", type=argparse.FileType("rb"), help="Path to the secrets file"
     )
-    parser.add_argument(
-        "channel", 
-        type=int, 
-        help="Channel to encode for"
-    )
-    parser.add_argument(
-        "frame", 
-        help="Contents of the frame"
-    )
-    parser.add_argument(
-        "timestamp", 
-        type=int, 
-        help="64b timestamp to use"
-    )
+    parser.add_argument("channel", type=int, help="Channel to encode for")
+    parser.add_argument("frame", help="Contents of the frame")
+    parser.add_argument("timestamp", type=int, help="64b timestamp to use")
     args = parser.parse_args()
 
     encoder = Encoder(args.secrets_file.read())

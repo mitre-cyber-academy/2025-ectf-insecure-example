@@ -116,6 +116,9 @@ typedef struct {
 // This is used to track decoder subscriptions
 flash_entry_t decoder_status;
 
+//previous frame timestamp for timestamp validation
+timestamp_t prev_frame_timestamp = 0;
+
 
 /**********************************************************
  ******************* UTILITY FUNCTIONS ********************
@@ -138,6 +141,44 @@ int is_subscribed(channel_id_t channel) {
         }
     }
     return 0;
+}
+
+/** @brief Checks whether a frame timestamp is valid for the decoder's subscription to a given channel
+ *
+ *  @param timestamp The timestamp to be checked.
+ *  @param channel The channel number to be checked.
+ * 
+ *  @return 1 if the timestamp is valid for the channel.  0 if not.
+*/
+int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
+    // Check if this is an emergency broadcast message
+    if (channel == EMERGENCY_CHANNEL) {
+        return 1;
+    }
+    //ensure timestamp is increasing monotonically
+    if (timestamp <= prev_frame_timestamp) {
+        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Timestamp invalid - non-monotonic.");
+        return 0;
+    }
+
+    // Check if the timestamp is within the subscription window
+    for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (decoder_status.subscribed_channels[i].id == channel) {
+            if (decoder_status.subscribed_channels[i].start_timestamp <= timestamp && decoder_status.subscribed_channels[i].end_timestamp >= timestamp) {
+                return 1;
+            }
+            else {
+                //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+                MXC_Delay(MXC_DELAY_MSEC(5000));
+                STATUS_LED_ERROR();
+                print_error("Timestamp invalid - outside of subscription window.");
+                return 0;
+            }
+        }
+    }
 }
 
 
@@ -217,6 +258,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     return 0;
 }
 
+
 /** @brief Processes a packet containing frame data.
  *
  *  @param pkt_len A pointer to the incoming packet.
@@ -234,7 +276,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     channel = new_frame->channel;
 
     // The reference design doesn't use the timestamp, but you may want to in your design
-    // timestamp_t timestamp = new_frame->timestamp;
+     timestamp_t timestamp = new_frame->timestamp;
 
     // Check that we are subscribed to the channel...
     print_debug("Checking subscription\n");
@@ -244,8 +286,16 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     
     if (is_subscribed(channel)) {
         print_debug("Subscription Valid\n");
-        /* The reference design doesn't need any extra work to decode, but your design likely will.
-        *  Do any extra decoding here before returning the result to the host. */
+        print_debug("Checking timestamp\n");
+        if (timestamp_valid(timestamp, channel)) {
+            print_debug("Timestamp Valid\n");
+            prev_frame_timestamp = timestamp;
+        } else {
+            //timestamp errors are printed in timestamp_valid()
+            //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+            MXC_Delay(MXC_DELAY_MSEC(5000));
+            return -1;
+        }
         write_packet(DECODE_MSG, new_frame->data, frame_size);
         return 0;
     } else {
