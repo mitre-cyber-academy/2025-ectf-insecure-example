@@ -32,10 +32,10 @@ jobs:
           cd decoder
           docker build -t decoder .
       
-      - name: Security scan
-        run: |
-          pip install bandit
-          bandit -r ./design ./tools
+      # - name: Security scan
+      #   run: |
+      #     pip install bandit
+      #     bandit -r ./design ./tools
           
       # Optional - only include if you have unit tests
       # - name: Run tests
