@@ -19,10 +19,57 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      
+      # If this is an issue closed event, get the closing comment
+      - name: Get closing comment
+        id: get_closing_comment
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            
+            // Get the latest comment on the issue
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 1,
+              sort: 'created',
+              direction: 'desc'
+            });
+            
+            let closingComment = "Issue closed without comment";
+            let commentUrl = context.payload.issue.html_url;
+            
+            if (comments.data.length > 0) {
+              // Get the timestamp of the latest comment
+              const latestCommentTime = new Date(comments.data[0].created_at);
+              // Get the timestamp when the issue was closed
+              const closedTime = new Date(context.payload.issue.closed_at);
+              
+              // Consider it a closing comment if it was made within 5 minutes of closing
+              const timeDiffMinutes = (closedTime - latestCommentTime) / (1000 * 60);
+              
+              if (timeDiffMinutes < 5 && timeDiffMinutes > -5) {
+                // Limit comment length to avoid extremely long messages
+                const commentBody = comments.data[0].body;
+                closingComment = commentBody.length > 300 
+                  ? commentBody.substring(0, 300) + "..." 
+                  : commentBody;
+                commentUrl = comments.data[0].html_url;
+              }
+            }
+            
+            core.setOutput('closing_comment', closingComment);
+            core.setOutput('comment_url', commentUrl);
         
       - name: Discord notification
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CLOSING_COMMENT: ${{ steps.get_closing_comment.outputs.closing_comment || '' }}
+          COMMENT_URL: ${{ steps.get_closing_comment.outputs.comment_url || '' }}
         uses: Ilshidur/action-discord@master
         if: github.event_name != 'project_card' || contains(github.event.project_card.note, 'done') || contains(github.event.project_card.column_name, 'Done')
         with:
@@ -34,6 +81,7 @@ jobs:
             
             ${{ github.event_name == 'push' && format('**Branch:** {0}', github.ref_name) || '' }}
             ${{ github.event_name == 'pull_request' && format('**PR:** [{0}]({1}) - {2}', github.event.pull_request.title, github.event.pull_request.html_url, github.event.pull_request.state) || '' }}
-            ${{ github.event_name == 'issues' && format('**Issue:** [{0}]({1}) - {2}', github.event.issue.title, github.event.issue.html_url, github.event.issue.state) || '' }}
+            ${{ github.event_name == 'issues' && github.event.action != 'closed' && format('**Issue:** [{0}]({1}) - {2}', github.event.issue.title, github.event.issue.html_url, github.event.issue.state) || '' }}
+            ${{ github.event_name == 'issues' && github.event.action == 'closed' && format('**Issue Closed:** [{0}]({1})\n> {2}', github.event.issue.title, env.COMMENT_URL, env.CLOSING_COMMENT) || '' }}
             ${{ github.event_name == 'pull_request_review' && format('**PR Review:** [{0}]({1}) - {2}', github.event.pull_request.title, github.event.pull_request.html_url, github.event.review.state) || '' }}
             ${{ github.event_name == 'project_card' && format('**Project Card Update:** Card {0} to column: {1}', github.event.project_card.id, github.event.project_card.column_name) || '' }}
