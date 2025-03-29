@@ -8,6 +8,13 @@ on:
   # This ensures checks run when PRs are added to the merge queue
   merge_group:
     types: [ checks_requested ]
+  # Allow manual triggering via GitHub UI
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: 'Pull Request Number to run checks on'
+        required: false
+        type: string
 
 jobs:
   lint:
