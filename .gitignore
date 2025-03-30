@@ -338,3 +338,4 @@ msdk/
 *.secrets
 *.subscription
 *.json
+secret_keys.h

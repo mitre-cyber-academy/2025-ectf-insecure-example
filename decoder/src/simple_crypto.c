@@ -1,17 +1,10 @@
 /**
  * @file "simple_crypto.c"
- * @author Ben Janis
- * @brief Simplified Crypto API Implementation
+ * @author Crypto Caballero
+ * @brief Source file holding cryptographic efforts performed by FIU's 2025 eCTF team.
  * @date 2025
  *
- * This source file is part of an example system for MITRE's 2025 Embedded System CTF (eCTF).
- * This code is being provided only for educational purposes for the 2025 MITRE eCTF competition,
- * and may not meet MITRE standards for quality. Use this code at your own risk!
- *
- * @copyright Copyright (c) 2025 The MITRE Corporation
  */
-
-#if CRYPTO_EXAMPLE
 
 #include "simple_crypto.h"
 #include <stdint.h>
@@ -101,8 +94,35 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
  * @return 0 on success, non-zero for other error
  */
 int hash(void *data, size_t len, uint8_t *hash_out) {
-    // Pass values to hash
-    return wc_Md5Hash((uint8_t *)data, len, hash_out);
+//     // Pass values to hash
+//     return wc_Sha256Hash((uint8_t *)data, len, hash_out);
+// }
+    // Add debugging
+    if (data == NULL) {
+        print_debug("WARNING: Null data pointer passed to hash");
+        return -1;
+    }
+        
+    if (hash_out == NULL) {
+        print_debug("WARNING: Null output pointer passed to hash");
+        return -2;
+    }
+        
+    if (len == 0) {
+        print_debug("WARNING: Zero length passed to hash");
+        // Handle zero length (might not be an error)
+    }
+        
+    print_debug("Hash called with valid parameters");
+        
+    // Call WolfSSL function
+    int result = wc_Sha256Hash((uint8_t *)data, len, hash_out);
+        
+    // Check result
+    if (result != 0) {
+        char error_buf[64];
+        sprintf(error_buf, "WolfSSL hash returned error: %d", result);
+        print_debug(error_buf);
+    }  
+    return result;
 }
-
-#endif

@@ -1,10 +1,9 @@
 /**
  * @file    decoder.c
  * @author  Crypto Caballeros
- * @brief   eCTF Decoder
+ * @brief   eCTF 2025 Decoder's main source file 
  * @date    2025
  *
- * @copyright Copyright (c) 2025 The MITRE Corporation
  */
 
 /*********************** INCLUDES *************************/
@@ -17,20 +16,10 @@
 #include "mxc_delay.h"
 #include "simple_flash.h"
 #include "host_messaging.h"
-
 #include "simple_uart.h"
-
-/* Code between this #ifdef and the subsequent #endif will
-*  be ignored by the compiler if CRYPTO_EXAMPLE is not set in
-*  the projectk.mk file. */
-#ifdef CRYPTO_EXAMPLE
-/* The simple crypto example included with the reference design is intended
-*  to be an example of how you *may* use cryptography in your design. You
-*  are not limited nor required to use this interface in your design. It is
-*  recommended for newer teams to start by only using the simple crypto
-*  library until they have a working design. */
+#include "secret_keys.h"
+#include "user_settings.h"
 #include "simple_crypto.h"
-#endif  //CRYPTO_EXAMPLE
 
 /**********************************************************
  ******************* PRIMITIVE TYPES **********************
@@ -80,6 +69,7 @@ typedef struct {
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
+    uint8_t signature[HASH_SIZE]; // Signature field from subscription signing
 } subscription_update_packet_t;
 
 typedef struct {
@@ -136,13 +126,26 @@ int is_subscribed(channel_id_t channel) {
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
-    // Check if the decoder has a subscription
+    // // Check if the decoder has a subscription
+    // for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
+    //     if (decoder_status.subscribed_channels[i].id == channel && decoder_status.subscribed_channels[i].active) {
+    //         return 1;
+    //     }
+    // }
+    // return 0;
+
+    // Constant-time subscription check
+    int result = 0;
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-        if (decoder_status.subscribed_channels[i].id == channel && decoder_status.subscribed_channels[i].active) {
-            return 1;
-        }
+        // This boolean logic combines checks without branches
+        int matches = (decoder_status.subscribed_channels[i].id == channel);
+        int is_active = decoder_status.subscribed_channels[i].active;
+
+        // Or the result with matches AND is active, in constant time
+        result |= (matches & is_active);
     }
-    return 0;
+
+    return result;
 }
 
 /** @brief Checks whether a frame timestamp is valid for the decoder's subscription to a given channel
@@ -159,7 +162,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     }
     //ensure timestamp is increasing monotonically
     if (timestamp <= prev_frame_timestamp) {
-        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+        // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         print_error("Timestamp invalid - non-monotonic.");
@@ -173,7 +176,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
                 return 1;
             }
             else {
-                //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+                // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
                 MXC_Delay(MXC_DELAY_MSEC(5000));
                 STATUS_LED_ERROR();
                 print_error("Timestamp invalid - outside of subscription window.");
@@ -181,6 +184,32 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
             }
         }
     }
+    return 0;
+}
+
+/** @brief Performs a constant-time comparison of two buffers
+ * 
+ * @param a First buffer
+ * @param b Second buffer
+ * @param len Length of buffers to compare
+ * 
+ * @return 0 if equal, non-zero otherwise
+ */
+static int constant_time_memcmp(const void* a, const void* b, size_t len) {
+    const unsigned char* pa = (const unsigned char*)a;
+    const unsigned char* pb = (const unsigned char*)b;
+    unsigned char result = 0;
+    print_hex_debug(pa, sizeof(a));
+    print_hex_debug(pb, sizeof(b));
+
+
+    for (size_t i = 0; i < len; i++) {
+        /* XOR each byte and OR the results together
+           If all bytes are equal, result will be 0 */
+        result |= pa[i] ^ pb[i];
+    }
+    
+    return result != 0;
 }
 
 
@@ -224,18 +253,133 @@ int list_channels() {
  *
  *  @note Take care to note that this system is little endian.
  *
- *  @return 0 upon success.  -1 if error.
+ *  @return 0 upon success. -1 if error.
 */
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
 
+    // channel 0 is always available, 
+    // not able to be subscribed to since it is an emergency channel
     if (update->channel == EMERGENCY_CHANNEL) {
         STATUS_LED_RED();
         print_error("Failed to update subscription - cannot subscribe to emergency channel\n");
         return -1;
     }
 
-    // Find the first empty slot in the subscription array
+    // Verify this update is for this decoder
+    if (update->decoder_id != DECODER_ID) {
+        // IPS DELAYS 5 SECONDS ON INVALID DECODER
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Failed to update subscription - wrong decoder ID\n");
+        return -1;
+    }
+
+    // Create a buffer with the subscription data to verify signature
+    uint8_t verify_buffer[sizeof(decoder_id_t) + sizeof(timestamp_t) * 2 + sizeof(channel_id_t)];
+    uint8_t computed_hash[HASH_SIZE];
+    uint8_t device_key[HASH_SIZE];
+
+    // Copy data into verification buffer (all data except the siganture)
+    memcpy(verify_buffer, &update->decoder_id, sizeof(decoder_id_t));
+    memcpy(verify_buffer + sizeof(decoder_id_t), 
+        &update->start_timestamp, sizeof(timestamp_t));
+    memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t),
+        &update->end_timestamp, sizeof(timestamp_t));
+    memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t) * 2,
+        &update->channel, sizeof(channel_id_t));
+
+    print_debug("Verify Buffer: ");
+    print_hex_debug(verify_buffer, sizeof(verify_buffer));
+    // Get subscription/master key using the lead_subscription_key function
+    // Uses a get_key_byte function from secrets_keys.h
+    // Stored in key_bytes buffer
+    uint8_t key_bytes[SUBSCRIPTION_KEY_SIZE];
+    load_subscription_key(key_bytes);
+
+    print_debug("sub key: ");
+    print_hex_debug(key_bytes, sizeof(key_bytes));
+
+    print_debug("Decoder ID: ");
+    print_hex_debug(&update->decoder_id, sizeof(decoder_id_t));    
+
+    // Derive device-specific key
+    uint8_t device_key_input[SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t)];
+    memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE);
+    memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, &update->decoder_id, sizeof(decoder_id_t));
+
+    print_debug("Starting hash debugging...\n");
+
+    // Print input data
+    print_debug("Device key input data (hex): ");
+    print_hex_debug(device_key_input, SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t));
+
+    // Print length values
+    char debug_buf[128];
+    sprintf(debug_buf, "Input lengths: SUBSCRIPTION_KEY_SIZE=%d, sizeof(decoder_id_t)=%d, Total=%d",
+            SUBSCRIPTION_KEY_SIZE, (int)sizeof(decoder_id_t), 
+            SUBSCRIPTION_KEY_SIZE + (int)sizeof(decoder_id_t));
+    print_debug(debug_buf);
+
+    // Print memory addresses for debugging pointer issues
+    sprintf(debug_buf, "Memory addresses: device_key_input=%p, device_key=%p", 
+            (void*)device_key_input, (void*)device_key);
+    print_debug(debug_buf);
+
+    // Call hash with debug wrapper
+    print_debug("Calling hash function...");
+    int hash_result = hash(device_key_input, SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t), device_key);
+
+    // Print result code
+    sprintf(debug_buf, "Hash function returned: %d", hash_result);
+    print_debug(debug_buf);
+
+    // Examine output
+    print_debug("Hash output (should NOT be all zeros): ");
+    print_hex_debug(device_key, HASH_SIZE);
+
+    print_debug("Device_key_Input: ");
+    print_hex_debug(device_key_input, sizeof(device_key_input));
+
+    // Hash derived device key
+    // Hased with wolfssl function - output to device_key
+    hash(device_key_input, sizeof(device_key_input), device_key);
+
+    print_debug("Device Key: ");
+    print_hex_debug(device_key, sizeof(device_key));
+
+    // Compute HMAC: hash (device key || data)
+    uint8_t hmac_buffer[HASH_SIZE + sizeof(verify_buffer)];
+    memcpy(hmac_buffer, device_key, HASH_SIZE);
+    memcpy(hmac_buffer + HASH_SIZE, verify_buffer, sizeof(verify_buffer));
+
+    print_debug("HMAC buffer: ");
+    print_hex_debug(hmac_buffer, sizeof(hmac_buffer));
+
+    // Hash computed
+    // Hashed with wolfssl function - output to computed_hash
+    hash(hmac_buffer, sizeof(hmac_buffer), computed_hash);
+
+    print_debug("computed Hash: ");
+    print_hex_debug(computed_hash, sizeof(computed_hash));
+
+    // Securely clear the key from memory when done
+    secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
+
+    print_debug("Verifying subscription signature...\n");
+
+    // Verify the signature in constant time
+    if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
+        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Failed to update subscription - invalid signature\n");
+        return -1;
+    }
+
+    print_debug("Signature verified successfully\n");
+
+    // Find the first empty slot or existing subscripiton in the subscription array for this channel
     for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == update->channel || !decoder_status.subscribed_channels[i].active) {
             decoder_status.subscribed_channels[i].active = true;
@@ -248,13 +392,17 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
+        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+        MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
     }
 
+    // Persist the updated subscription to flash
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+
     // Success message with an empty body
     write_packet(SUBSCRIBE_MSG, NULL, 0);
     return 0;
@@ -294,8 +442,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             prev_frame_timestamp = timestamp;
         } else {
             //timestamp errors are printed in timestamp_valid()
-            //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
-            MXC_Delay(MXC_DELAY_MSEC(5000));
             return -1;
         }
         // before writing the bytes, decrypt
@@ -316,7 +462,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
 
         //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
         MXC_Delay(MXC_DELAY_MSEC(5000));
-        
         STATUS_LED_RED();
         sprintf(
             output_buf,
@@ -367,6 +512,10 @@ void init() {
         // if uart fails to initialize, do not continue to execute
         while (1);
     }
+
+    if (sizeof(decoder_id_t) > 8) {
+        print_debug("Warning: Unexpected device ID size detected\n");
+    }
 }
 
 /**********************************************************
@@ -405,14 +554,6 @@ int main(void) {
         // Handle list command
         case LIST_MSG:
             STATUS_LED_CYAN();
-
-            #ifdef CRYPTO_EXAMPLE
-                // Run the crypto example
-                // TODO: Remove this from your design
-                crypto_example();
-            #endif // CRYPTO_EXAMPLE
-
-            
             list_channels();
             break;
 

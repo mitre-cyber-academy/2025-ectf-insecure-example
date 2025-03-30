@@ -1,19 +1,15 @@
 """
-Author: Ben Janis
+Author: Crypto Caballeros
 Date: 2025
 
-This source file is part of an example system for MITRE's 2025 Embedded System CTF
-(eCTF). This code is being provided only for educational purposes for the 2025 MITRE
-eCTF competition, and may not meet MITRE standards for quality. Use this code at your
-own risk!
-
-Copyright: Copyright (c) 2025 The MITRE Corporation
+This file generates subscriptions to be used in a satllite TV system.
 """
 
 import argparse
 import json
 from pathlib import Path
 import struct
+import hashlib
 
 from loguru import logger
 
@@ -30,20 +26,43 @@ def gen_subscription(
     :param start: First timestamp the subscription is valid for
     :param end: Last timestamp the subscription is valid for
     :param channel: Channel to enable
+
+    :return result: subscription data and signature for verifcation
     """
-    # TODO: Update this function to provide a Decoder with whatever data it needs to
-    #   subscribe to a new channel
 
     # Load the json of the secrets file
     secrets = json.loads(secrets)
 
-    # You can use secrets generated using `gen_secrets` here like:
-    # secrets["some_secrets"]
-    # Which would return "EXAMPLE" in the reference design.
-    # Please note that the secrets are READ ONLY at this stage!
+    # Extract the subscription key from secrets
+    master_key = bytes.fromhex(secrets["subscription_Key"])
 
-    # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return struct.pack("<IQQI", device_id, start, end, channel)
+    # Check if requested channel is valid
+    if channel not in secrets["channels"] and channel != 0:
+        logger.error(f"Channel {channel} is not a valid channel in this deployment. Valid channels are: {secrets["channels"]}")
+        raise ValueError(f"Invalid channel: {channel}")
+
+    # Create data buffer to be signed (device_id, start time, end time, channel)
+    # for subscription (packaged)
+    data_buffer = struct.pack("<IQQI", device_id, start, end, channel)
+
+    # Determine device ID size and convert to bytes (little-endian)
+    device_id_bytes = struct.pack("<I", device_id)
+
+    # Derive a device-specific key using the device ID
+    device_key_input = master_key + device_id_bytes
+    device_key = hashlib.sha256(device_key_input).digest() # Hash to mitigate tampering
+
+    # Generate the HMAC signature for the subscription data
+    # Simple HMAC construction: hash(device_key || data) 
+    # Signature will be decyphered if decoder is valid
+    hmac_input = device_key + data_buffer
+    signature = hashlib.sha256(hmac_input).digest()
+
+    # Subscription packed into data_buffer (signature added on). 
+    # This will be sent to the decoder with ectf25.tv.subscribe
+    result = data_buffer + signature
+
+    return result
 
 
 def parse_args():
