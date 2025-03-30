@@ -36,6 +36,12 @@ def gen_subscription(
     # Extract the subscription key from secrets
     master_key = bytes.fromhex(secrets["subscription_Key"])
 
+    # Debug output
+    print("\n=== PYTHON DEBUGGING VALUES ===")
+    print(f"Device ID (hex): 0x{device_id:08X}")
+    print(f"Device ID (int): {device_id}")
+    print(f"Master Key (hex): {master_key.hex()}")
+
     # Check if requested channel is valid
     if channel not in secrets["channels"] and channel != 0:
         logger.error(f"Channel {channel} is not a valid channel in this deployment. Valid channels are: {secrets["channels"]}")
@@ -44,19 +50,34 @@ def gen_subscription(
     # Create data buffer to be signed (device_id, start time, end time, channel)
     # for subscription (packaged)
     data_buffer = struct.pack("<IQQI", device_id, start, end, channel)
+    print(f"Data Buffer (hex): {data_buffer.hex()}")
 
     # Determine device ID size and convert to bytes (little-endian)
     device_id_bytes = struct.pack("<I", device_id)
+    print(f"Device ID Bytes (hex): {device_id_bytes.hex()}")
 
-    # Derive a device-specific key using the device ID
+    # Create input for device key
     device_key_input = master_key + device_id_bytes
-    device_key = hashlib.sha256(device_key_input).digest() # Hash to mitigate tampering
+    print(f"Device Key Input (hex): {device_key_input.hex()}")
+    print(f"Device Key Input Length: {len(device_key_input)}")
 
-    # Generate the HMAC signature for the subscription data
+    # Hash to create device key
+    # mitigates tampering
+    device_key = hashlib.sha256(device_key_input).digest() 
+    print(f"Device Key (hex): {device_key.hex()}")
+
+    # Create HMAC input for the subscription signature
     # Simple HMAC construction: hash(device_key || data) 
-    # Signature will be decyphered if decoder is valid
     hmac_input = device_key + data_buffer
+    print(f"HMAC Input (hex): {hmac_input.hex()}")
+    print(f"HMAC Input Length: {len(hmac_input)}")
+
+    # Generate Signature
+    # Signature will be decyphered if decoder is valid
     signature = hashlib.sha256(hmac_input).digest()
+    print(f"Signature (hex): {signature.hex()}")
+    print(f"Final subscription length: {len(data_buffer + signature)}")
+    print("=== END PYTHON DEBUGGING ===\n")
 
     # Subscription packed into data_buffer (signature added on). 
     # This will be sent to the decoder with ectf25.tv.subscribe
