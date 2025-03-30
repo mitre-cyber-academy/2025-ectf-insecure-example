@@ -6,9 +6,10 @@
  *
  */
 
-#include "simple_crypto.h"
 #include <stdint.h>
 #include <string.h>
+#include "simple_crypto.h"
+#include "host_messaging.h"
 
 
 /******************************** FUNCTION PROTOTYPES ********************************/
@@ -94,35 +95,30 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
  * @return 0 on success, non-zero for other error
  */
 int hash(void *data, size_t len, uint8_t *hash_out) {
-//     // Pass values to hash
-//     return wc_Sha256Hash((uint8_t *)data, len, hash_out);
-// }
-    // Add debugging
+    char debug_buf[128];
+    
     if (data == NULL) {
-        print_debug("WARNING: Null data pointer passed to hash");
+        print_debug("NULL data pointer passed to hash");
         return -1;
     }
-        
+    
     if (hash_out == NULL) {
-        print_debug("WARNING: Null output pointer passed to hash");
+        print_debug("NULL output pointer passed to hash");
         return -2;
     }
-        
+
     if (len == 0) {
-        print_debug("WARNING: Zero length passed to hash");
-        // Handle zero length (might not be an error)
+        print_debug("Zero length passed to hash - this may be valid but unusual");
     }
-        
-    print_debug("Hash called with valid parameters");
-        
+    
+    sprintf(debug_buf, "Hash called with length: %zu", len);
+    print_debug(debug_buf);
+    
     // Call WolfSSL function
-    int result = wc_Sha256Hash((uint8_t *)data, len, hash_out);
-        
-    // Check result
-    if (result != 0) {
-        char error_buf[64];
-        sprintf(error_buf, "WolfSSL hash returned error: %d", result);
-        print_debug(error_buf);
-    }  
+    int result = wc_Sha256Hash((const byte *)data, (word32)len, hash_out);
+    
+    sprintf(debug_buf, "WolfSSL hash returned: %d", result);
+    print_debug(debug_buf);
+    
     return result;
 }
