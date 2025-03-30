@@ -223,9 +223,6 @@ static int constant_time_memcmp(const void* a, const void* b, size_t len) {
     const unsigned char* pa = (const unsigned char*)a;
     const unsigned char* pb = (const unsigned char*)b;
     unsigned char result = 0;
-    print_hex_debug(pa, sizeof(a));
-    print_hex_debug(pb, sizeof(b));
-
 
     for (size_t i = 0; i < len; i++) {
         /* XOR each byte and OR the results together
@@ -233,7 +230,7 @@ static int constant_time_memcmp(const void* a, const void* b, size_t len) {
         result |= pa[i] ^ pb[i];
     }
     
-    return result != 0;
+    return (result != 0);
 }
 
 
@@ -303,6 +300,13 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         return -1;
     }
 
+    // Debug output
+    print_debug("\n=== C DEBUGGING VALUES ===");
+    sprintf(debug_buf, "Device ID (hex): 0x%08X", update->decoder_id);
+    print_debug(debug_buf);
+    sprintf(debug_buf, "Device ID (int): %u", update->decoder_id);
+    print_debug(debug_buf);
+
     // Create a buffer with the subscription data to verify signature
     uint8_t verify_buffer[sizeof(decoder_id_t) + sizeof(timestamp_t) * 2 + sizeof(channel_id_t)];
     uint8_t computed_hash[HASH_SIZE];
@@ -317,79 +321,95 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t) * 2,
         &update->channel, sizeof(channel_id_t));
 
-    print_debug("Verify Buffer: ");
+    print_debug("Data Buffer (hex):");
     print_hex_debug(verify_buffer, sizeof(verify_buffer));
-    // Get subscription/master key using the lead_subscription_key function
-    // Uses a get_key_byte function from secrets_keys.h
-    // Stored in key_bytes buffer
+
+    // Get subscription/master key using the load_subscription_key function
     uint8_t key_bytes[SUBSCRIPTION_KEY_SIZE];
     load_subscription_key(key_bytes);
 
-    print_debug("sub key: ");
-    print_hex_debug(key_bytes, sizeof(key_bytes));
+    print_debug("Master Key (hex):");
+    print_hex_debug(key_bytes, SUBSCRIPTION_KEY_SIZE);
 
-    print_debug("Decoder ID: ");
-    print_hex_debug(&update->decoder_id, sizeof(decoder_id_t));    
+    // Convert device ID to bytes (similar to Python format)
+    uint8_t device_id_bytes[sizeof(decoder_id_t)]; // buffer for device id
+    memcpy(device_id_bytes, &update->decoder_id, sizeof(decoder_id_t));
 
-    // Derive device-specific key
+    print_debug("Device ID Bytes (hex):");
+    print_hex_debug(device_id_bytes, sizeof(device_id_bytes));
+
+    // Create device-specific key input buffer
+    uint32_t device_key_input_size = SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t);
     uint8_t device_key_input[SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t)];
+
+    // Initialize device key input 
+    memset(device_key_input, 0, device_key_input_size);
+
+    // Copy data
     memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE);
-    memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, &update->decoder_id, sizeof(decoder_id_t));
+    memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, device_id_bytes, sizeof(decoder_id_t));
 
-    print_debug("Starting hash debugging...\n");
-
-    // Print input data
-    print_debug("Device key input data (hex): ");
-    print_hex_debug(device_key_input, SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t));
-
-    // Print length values
-    char debug_buf[128];
-    sprintf(debug_buf, "Input lengths: SUBSCRIPTION_KEY_SIZE=%d, sizeof(decoder_id_t)=%d, Total=%d",
-            SUBSCRIPTION_KEY_SIZE, (int)sizeof(decoder_id_t), 
-            SUBSCRIPTION_KEY_SIZE + (int)sizeof(decoder_id_t));
+    print_debug("Device Key Input (hex):");
+    print_hex_debug(device_key_input, device_key_input_size);
+    sprintf(debug_buf, "Device Key Input Length: %u", device_key_input_size);
     print_debug(debug_buf);
 
-    // Print memory addresses for debugging pointer issues
-    sprintf(debug_buf, "Memory addresses: device_key_input=%p, device_key=%p", 
-            (void*)device_key_input, (void*)device_key);
-    print_debug(debug_buf);
+    // Hash to create device key
+    memset(device_key, 0, HASH_SIZE);
+    int hash_result = hash(device_key_input, device_key_input_size, device_key);
 
-    // Call hash with debug wrapper
-    print_debug("Calling hash function...");
-    int hash_result = hash(device_key_input, SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t), device_key);
+    if (hash_result != 0) {
+        char error_buf[64];
+        sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
+        print_debug(error_buf);
+        
+        // Delay and return error
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Failed to update subscription - hash computation error\n");
+        return -1;
+    }
 
-    // Print result code
-    sprintf(debug_buf, "Hash function returned: %d", hash_result);
-    print_debug(debug_buf);
-
-    // Examine output
-    print_debug("Hash output (should NOT be all zeros): ");
+    print_debug("Device Key (hex):");
     print_hex_debug(device_key, HASH_SIZE);
 
-    print_debug("Device_key_Input: ");
-    print_hex_debug(device_key_input, sizeof(device_key_input));
+    // Create HMAC input buffer
+    uint32_t hmac_input_size = HASH_SIZE + sizeof(verify_buffer);
+    uint8_t hmac_input[hmac_input_size];
 
-    // Hash derived device key
-    // Hased with wolfssl function - output to device_key
-    hash(device_key_input, sizeof(device_key_input), device_key);
+    // Initialize HMAC input
+    memset(hmac_input, 0, hmac_input_size);
 
-    print_debug("Device Key: ");
-    print_hex_debug(device_key, sizeof(device_key));
+    // Copy data
+    memcpy(hmac_input, device_key, HASH_SIZE);
+    memcpy(hmac_input + HASH_SIZE, verify_buffer, sizeof(verify_buffer));
+
+    print_debug("HMAC Input (hex):");
+    print_hex_debug(hmac_input, hmac_input_size);
+    sprintf(debug_buf, "HMAC Input Length: %u", hmac_input_size);
+    print_debug(debug_buf);
 
     // Compute HMAC: hash (device key || data)
-    uint8_t hmac_buffer[HASH_SIZE + sizeof(verify_buffer)];
-    memcpy(hmac_buffer, device_key, HASH_SIZE);
-    memcpy(hmac_buffer + HASH_SIZE, verify_buffer, sizeof(verify_buffer));
+    memset(computed_hash, 0, HASH_SIZE);
+    hash_result = hash(hmac_input, hmac_input_size, computed_hash);
 
-    print_debug("HMAC buffer: ");
-    print_hex_debug(hmac_buffer, sizeof(hmac_buffer));
+    if (hash_result != 0) {
+        char error_buf[64];
+        sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
+        print_debug(error_buf);
+        
+        // Delay and return error
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Failed to update subscription - hash computation error\n");
+        return -1;
+    }
 
-    // Hash computed
-    // Hashed with wolfssl function - output to computed_hash
-    hash(hmac_buffer, sizeof(hmac_buffer), computed_hash);
-
-    print_debug("computed Hash: ");
-    print_hex_debug(computed_hash, sizeof(computed_hash));
+    print_debug("computed Signature (hex):");
+    print_hex_debug(computed_hash, HASH_SIZE);
+    print_debug("Expected Signature (hex):");
+    print_hex_debug(update->signature, HASH_SIZE);
+    print_debug("=== END C DEBUGGING ===\n");
 
     // Securely clear the key from memory when done
     secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
