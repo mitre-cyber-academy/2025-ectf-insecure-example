@@ -20,6 +20,7 @@
 #include "secret_keys.h"
 #include "user_settings.h"
 #include "simple_crypto.h"
+#include <wolfssl/wolfcrypt/aes.h>
 
 /**********************************************************
  ******************* PRIMITIVE TYPES **********************
@@ -430,6 +431,32 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 }
 
 
+
+int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, 
+                unsigned char* key, unsigned char* iv, 
+                uint8_t* plaintext) {
+    Aes aes;
+    int ret;
+    
+    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    if (ret != 0) return -1;
+    
+    ret = wc_AesSetKey(&aes, key, 32, iv, AES_DECRYPTION);
+    if (ret != 0) return -1;
+    
+    ret = wc_AesCbcDecrypt(&aes, plaintext, ciphertext, ciphertext_len);
+    if (ret != 0) return -1;
+    
+    // Remove padding
+    int plaintext_len = ciphertext_len;
+    while (plaintext_len > 0 && plaintext[plaintext_len-1] == 0) {
+        plaintext_len--;
+    }
+    
+    wc_AesFree(&aes);
+    return plaintext_len;
+}
+
 /** @brief Processes a packet containing frame data.
  *
  *  @param pkt_len A pointer to the incoming packet.
@@ -439,15 +466,26 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 */
 int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     char output_buf[128] = {0};
-    uint16_t frame_size;
+    uint16_t encrypted_size;
     channel_id_t channel;
 
     // Frame size is the size of the packet minus the size of non-frame elements
-    frame_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
+    uint16_t total_data_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
+
+    // Extract key (first 32 bytes)
+    unsigned char *key = new_frame->data;
+
+    // Extract IV (next 16 bytes)
+    unsigned char *iv = new_frame->data + 32;
+
+    // The rest is ciphertext
+    unsigned char *ciphertext = new_frame->data + 32 + 16;
+    encrypted_size = total_data_size - 32 - 16;
+
     channel = new_frame->channel;
 
     // The reference design doesn't use the timestamp, but you may want to in your design
-     timestamp_t timestamp = new_frame->timestamp;
+    timestamp_t timestamp = new_frame->timestamp;
 
     // Check that we are subscribed to the channel...
     print_debug("Checking subscription\n");

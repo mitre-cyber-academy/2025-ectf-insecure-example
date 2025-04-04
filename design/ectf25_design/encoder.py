@@ -11,10 +11,13 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 """
 
 import argparse
+from os import urandom
 import struct
 import json
 import time
 import array
+from wolfcrypt.ciphers import Aes
+
 
 
 class Encoder:
@@ -55,8 +58,19 @@ class Encoder:
         """
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
+        key = urandom(32)  # 32 bytes for AES-256
+        iv = urandom(16)   # 16 bytes for AES block size
 
-        return struct.pack("<IQ", channel, timestamp) + frame
+
+        aes = Aes(key, Aes.CBC_MODE, iv)
+
+        padding_length = 16 - (len(frame) % 16)
+        padded_data = frame + (b'\x00' * padding_length)
+
+        ciphertext = aes.encrypt(padded_data)
+
+
+        return struct.pack("<IQ", channel, timestamp) + key + iv + ciphertext
 
 
 def main():
