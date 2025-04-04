@@ -1,18 +1,14 @@
 """
-Author: Ben Janis
+Author: Crypto Caballeros
 Date: 2025
 
-This source file is part of an example system for MITRE's 2025 Embedded System CTF
-(eCTF). This code is being provided only for educational purposes for the 2025 MITRE
-eCTF competition, and may not meet MITRE standards for quality. Use this code at your
-own risk!
-
-Copyright: Copyright (c) 2025 The MITRE Corporation
+This file is used to generate secrets for a deployement of a satellite TV system.
 """
 
 import argparse
 import json
 from pathlib import Path
+import os
 
 from loguru import logger
 
@@ -29,10 +25,8 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-
-    # TODO: Update this function to generate any system-wide secrets needed by
-    #   your design
-    import os
+    # Secrets stored in JSON files cannot be stored as binary values, 
+    # they must be encoded to hex, base64, or another type of ASCII-only encoding
 
     # Key created for encrypting frames in encoder;
     # random 32 byte value is converted to hex (64 digits)
@@ -51,9 +45,6 @@ def gen_secrets(channels: list[int]) -> bytes:
         "subscription_Key": subscription_key,
     }
 
-    # NOTE: if you choose to use JSON for your file type, you will not be able to
-    # store binary data, and must either use a different file type or encode the
-    # binary data to hex, base64, or another type of ASCII-only encoding
     return json.dumps(secrets).encode()
 
 
