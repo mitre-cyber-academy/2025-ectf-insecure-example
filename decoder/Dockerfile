@@ -18,21 +18,22 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     gcc-arm-none-eabi \
     binutils-arm-none-eabi \
     make \
-    python3.10 \
-    # this creates proper Python links
-    python-is-python3 \  
+    python3 \
+    # # this creates proper Python links
+    # python-is-python3 \  
     git \
     wget \
     libtool \
     texinfo \
-    unzip    
+    unzip 
+
 
 # Verify Python installation
 RUN python3 --version && \
     which python3 && \
     ls -l /usr/bin/python*
 
-# Install MSDK w/ path verification
+# Install MSDK
 RUN apt-get install -y unzip && \
     wget https://github.com/analogdevicesinc/msdk/archive/refs/tags/v2024_02.zip && \
     unzip v2024_02.zip && \

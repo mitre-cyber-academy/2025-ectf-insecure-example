@@ -245,13 +245,13 @@ PROJ_CFLAGS += -Wall # Enable warnings
 PROJ_CFLAGS+=-DDECODER_ID=$(DECODER_ID)
 PROJ_CFLAGS += -DMXC_ASSERT_ENABLE
 # eCTF Crypto Example - WolfSSL Flags
-PROJ_CFLAGS += -DCRYPTO_EXAMPLE=1
+PROJ_CFLAGS += -DCRYPTO_HW_ENABLED=1
 PROJ_CFLAGS += -DNO_WOLFSSL_DIR
 # PROJ_CFLAGS += -DWOLFSSL_AES_DIRECT
 # PROJ_CFLAGS += -DSINGLE_THREADED
 # From https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html#building-with-gcc-arm
-PROJ_CFLAGS += -DHAVE_PK_CALLBACKS                                                               
-PROJ_CFLAGS += -DWOLFSSL_USER_IO                                                                 
+# PROJ_CFLAGS += -DHAVE_PK_CALLBACKS                                                               
+# PROJ_CFLAGS += -DWOLFSSL_USER_IO                                                                 
 # PROJ_CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT                                                    
 
 ifeq ($(POST_BOOT_ENABLED), 1)

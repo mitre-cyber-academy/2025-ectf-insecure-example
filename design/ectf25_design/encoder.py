@@ -13,8 +13,6 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 import argparse
 import struct
 import json
-import time
-import array
 
 
 class Encoder:
@@ -35,43 +33,6 @@ class Encoder:
         # This will be "EXAMPLE" in the reference design"
         # self.some_secrets = secrets["some_secrets"]
 
-    def userarray(self):
-        """
-        User Aunthentication Function
-        """
-
-        # Variables for user array
-        authenticated = False  # boolean to check authentication of attempted user
-        username = ""  # String for attempted user
-        password = ""  # String for attempted password
-        userinput = ""  # Users input
-        users = array(
-            ["admin", "william_kendrick_coleman", "animegirl_lover.05"],
-            ["admin", "TheDangersInMyHeart524!", ""],
-        )
-
-        while not authenticated:
-
-            # User Inputs
-            print("Enter Username:")
-            userinput = input()
-            username = userinput
-            print("Enter Password:")
-            userinput = input()
-            password = userinput
-
-            # Reference with Database
-            for i in range(users.list):
-
-                if username == users(0, i) and password == users(1, i):
-                    print("Success")
-                    authenticated = True
-                    time.sleep(5)
-
-            # TODO Add interface for authenticated users into user pass
-            # TODO Add preventions in "else" to mitigate injections
-
-        return ()
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function
