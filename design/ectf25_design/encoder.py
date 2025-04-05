@@ -14,8 +14,6 @@ import argparse
 from os import urandom
 import struct
 import json
-import time
-import array
 from wolfcrypt.ciphers import Aes
 
 
@@ -56,21 +54,29 @@ class Encoder:
 
         :returns: The encoded frame, which will be sent to the Decoder
         """
-        # TODO: encode the satellite frames so that they meet functional and
-        #  security requirements
+
         key = urandom(32)  # 32 bytes for AES-256
         iv = urandom(16)   # 16 bytes for AES block size
 
 
-        aes = Aes(key, Aes.CBC_MODE, iv)
+        aes = Aes(key, 2, iv)
 
         padding_length = 16 - (len(frame) % 16)
         padded_data = frame + (b'\x00' * padding_length)
 
         ciphertext = aes.encrypt(padded_data)
 
+        # Print sizes for debugging
+        print(f"Plaintext size: {len(frame)} bytes")
+        print(f"Padded size: {len(padded_data)} bytes")
+        print(f"Ciphertext size: {len(ciphertext)} bytes")
+        print(f"Total packet size: {12 + 32 + 16 + len(ciphertext)} bytes")
 
-        return struct.pack("<IQ", channel, timestamp) + key + iv + ciphertext
+        # 32 + 16 + 80 bytes = 128 bytes
+        encrypted_frame = key + iv + ciphertext
+
+        # 12 + 128 bytes = 140 bytes
+        return struct.pack("<IQ", channel, timestamp) + encrypted_frame
 
 
 def main():

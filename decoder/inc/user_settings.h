@@ -9,7 +9,7 @@
 #define WOLFSSL_USER_SETTINGS_H
 
 // Disable everything except SHA-256
-#define NO_AES
+// #define NO_AES
 #define NO_DES3
 #define NO_RC4
 #define NO_RSA
@@ -45,7 +45,7 @@
 // #define WORD64_MASK 0xFFFFFFFFFFFFFFFF
 
 // /* Algorithm selection */
-// #define WOLFSSL_AES_DIRECT    /* Direct AES operations */
+#define WOLFSSL_AES_DIRECT    /* Direct AES operations */
 // #define WOLFSSL_SHA256        /* Enables SHA 256 hash functions*/
 // #define NO_RC4                /* Disable unused algorithms */
 // #define NO_HC128
@@ -69,7 +69,7 @@
 // #define TFM_NO_ASM              /* Avoid assembly optimizations that might have timing variations */
 
 // /* Specific algorithm hardening */
-// #define AES_COUNTER_ONLY         /* AES in counter mode only, which is more resistant */
-// #define GCM_TABLE_4BIT           /* Use smaller tables for AES-GCM to reduce cache footprint */
+#define AES_COUNTER_ONLY         /* AES in counter mode only, which is more resistant */
+#define GCM_TABLE_4BIT           /* Use smaller tables for AES-GCM to reduce cache footprint */
 
 // #endif /* WOLFSSL_CONFIG_H */

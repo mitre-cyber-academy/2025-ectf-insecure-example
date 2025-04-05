@@ -24,7 +24,6 @@
 #include "user_settings.h"
 #include "simple_crypto.h"
 #include <wolfssl/wolfcrypt/aes.h>
-#include <wolfssl/wolfcrypt/aes.h>
 
 /**********************************************************
  ******************* PRIMITIVE TYPES **********************
@@ -64,9 +63,9 @@
 typedef struct {
     channel_id_t channel;
     timestamp_t timestamp;
-    uint32_t key;               // Encryption Key
-    uint16_t iv;                // Initialization Vector
-    uint8_t data[FRAME_SIZE];   // Frame Cipher
+    uint8_t key[32];               // Encryption Key
+    uint8_t iv[16];                // Initialization Vector
+    uint8_t data[];                // Frame Cipher
 } frame_packet_t;
 
 typedef struct {
@@ -74,7 +73,6 @@ typedef struct {
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
-    uint8_t signature[HASH_SIZE]; // Signature field from subscription signing
     uint8_t signature[HASH_SIZE]; // Signature field from subscription signing
 } subscription_update_packet_t;
 
@@ -142,32 +140,14 @@ int is_subscribed(channel_id_t channel) {
 
     // Constant-time subscription check
     int result = 0;
-    // // Check if the decoder has a subscription
-    // for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-    //     if (decoder_status.subscribed_channels[i].id == channel && decoder_status.subscribed_channels[i].active) {
-    //         return 1;
-    //     }
-    // }
-    // return 0;
-
-    // Constant-time subscription check
-    int result = 0;
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
         // This boolean logic combines checks without branches
-        int matches = (decoder_status.subscribed_channels[i].id == channel);
-        int is_active = decoder_status.subscribed_channels[i].active;
-
-        // Or the result with matches AND is active, in constant time
-        result |= (matches & is_active);
-        // This boolean logic combines checks without branches
-        int matches = (decoder_status.subscribed_channels[i].id == channel);
-        int is_active = decoder_status.subscribed_channels[i].active;
+        int matches = (decoder_status.subscribed_channels[i].id == channel) ? 1 : 0;
+        int is_active = decoder_status.subscribed_channels[i].active ? 1 : 0 ;
 
         // Or the result with matches AND is active, in constant time
         result |= (matches & is_active);
     }
-
-    return result;
 
     return result;
 }
@@ -210,29 +190,6 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
             }
         }
     }
-    return 0;
-}
-
-/** @brief Performs a constant-time comparison of two buffers
- * 
- * @param a First buffer
- * @param b Second buffer
- * @param len Length of buffers to compare
- * 
- * @return 0 if equal, non-zero otherwise
- */
-static int constant_time_memcmp(const void* a, const void* b, size_t len) {
-    const unsigned char* pa = (const unsigned char*)a;
-    const unsigned char* pb = (const unsigned char*)b;
-    unsigned char result = 0;
-
-    for (size_t i = 0; i < len; i++) {
-        /* XOR each byte and OR the results together
-           If all bytes are equal, result will be 0 */
-        result |= pa[i] ^ pb[i];
-    }
-    
-    return (result != 0);
     return 0;
 }
 
@@ -300,15 +257,11 @@ int list_channels() {
  *  @note Take care to note that this system is little endian.
  *
  *  @return 0 upon success. -1 if error.
- *  @return 0 upon success. -1 if error.
 */
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
     char debug_buf[128];
-    char debug_buf[128];
 
-    // channel 0 is always available, 
-    // not able to be subscribed to since it is an emergency channel
     // channel 0 is always available, 
     // not able to be subscribed to since it is an emergency channel
     if (update->channel == EMERGENCY_CHANNEL) {
@@ -388,7 +341,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         char error_buf[64];
         sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
         print_debug(error_buf);
-        
         // Delay and return error
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
@@ -423,7 +375,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         char error_buf[64];
         sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
         print_debug(error_buf);
-        
         // Delay and return error
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
@@ -435,148 +386,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     print_hex_debug(computed_hash, HASH_SIZE);
     print_debug("Expected Signature (hex):");
     print_hex_debug(update->signature, HASH_SIZE);
-    print_debug("=== END C DEBUGGING ===\n");
-
-    // Securely clear the key from memory when done
-    secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
-
-    print_debug("Verifying subscription signature...\n");
-
-    // Verify the signature in constant time
-    if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
-        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-        STATUS_LED_ERROR();
-        print_error("Failed to update subscription - invalid signature\n");
-        return -1;
-    }
-
-    print_debug("Signature verified successfully\n");
-
-    // Find the first empty slot or existing subscripiton in the subscription array for this channel
-    // Verify this update is for this decoder
-    if (update->decoder_id != DECODER_ID) {
-        // IPS DELAYS 5 SECONDS ON INVALID DECODER
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-        STATUS_LED_ERROR();
-        print_error("Failed to update subscription - wrong decoder ID\n");
-        return -1;
-    }
-
-    // Debug output
-    print_debug("\n=== C DEBUGGING VALUES ===");
-    sprintf(debug_buf, "Device ID (hex): 0x%08X", update->decoder_id);
-    print_debug(debug_buf);
-    sprintf(debug_buf, "Device ID (int): %u", update->decoder_id);
-    print_debug(debug_buf);
-
-    // Create a buffer with the subscription data to verify signature
-    uint8_t verify_buffer[sizeof(decoder_id_t) + sizeof(timestamp_t) * 2 + sizeof(channel_id_t)];
-    uint8_t computed_hash[HASH_SIZE];
-    uint8_t device_key[HASH_SIZE];
-
-    // Copy data into verification buffer (all data except the siganture)
-    memcpy(verify_buffer, &update->decoder_id, sizeof(decoder_id_t));
-    memcpy(verify_buffer + sizeof(decoder_id_t), 
-        &update->start_timestamp, sizeof(timestamp_t));
-    memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t),
-        &update->end_timestamp, sizeof(timestamp_t));
-    memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t) * 2,
-        &update->channel, sizeof(channel_id_t));
-
-    print_debug("Data Buffer (hex):");
-    print_hex_debug(verify_buffer, sizeof(verify_buffer));
-
-    // Get subscription/master key using the load_subscription_key function
-    uint8_t key_bytes[SUBSCRIPTION_KEY_SIZE];
-    load_subscription_key(key_bytes);
-
-    print_debug("Master Key (hex):");
-    print_hex_debug(key_bytes, SUBSCRIPTION_KEY_SIZE);
-
-    // Convert device ID to bytes (similar to Python format)
-    uint8_t device_id_bytes[sizeof(decoder_id_t)]; // buffer for device id
-    memcpy(device_id_bytes, &update->decoder_id, sizeof(decoder_id_t));
-
-    print_debug("Device ID Bytes (hex):");
-    print_hex_debug(device_id_bytes, sizeof(device_id_bytes));
-
-    // Create device-specific key input buffer
-    uint32_t device_key_input_size = SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t);
-    uint8_t device_key_input[SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t)];
-
-    // Initialize device key input 
-    memset(device_key_input, 0, device_key_input_size);
-
-    // Copy data
-    memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE);
-    memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, device_id_bytes, sizeof(decoder_id_t));
-
-    print_debug("Device Key Input (hex):");
-    print_hex_debug(device_key_input, device_key_input_size);
-    sprintf(debug_buf, "Device Key Input Length: %u", device_key_input_size);
-    print_debug(debug_buf);
-
-    // Hash to create device key
-    memset(device_key, 0, HASH_SIZE);
-    int hash_result = hash(device_key_input, device_key_input_size, device_key);
-
-    if (hash_result != 0) {
-        char error_buf[64];
-        sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
-        print_debug(error_buf);
-        
-        // Delay and return error
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-        STATUS_LED_ERROR();
-        print_error("Failed to update subscription - hash computation error\n");
-        return -1;
-    }
-
-    print_debug("Device Key (hex):");
-    print_hex_debug(device_key, HASH_SIZE);
-
-    // Create HMAC input buffer
-    uint32_t hmac_input_size = HASH_SIZE + sizeof(verify_buffer);
-    uint8_t hmac_input[hmac_input_size];
-
-    // Initialize HMAC input
-    memset(hmac_input, 0, hmac_input_size);
-
-    // Copy data
-    memcpy(hmac_input, device_key, HASH_SIZE);
-    memcpy(hmac_input + HASH_SIZE, verify_buffer, sizeof(verify_buffer));
-
-    print_debug("HMAC Input (hex):");
-    print_hex_debug(hmac_input, hmac_input_size);
-    sprintf(debug_buf, "HMAC Input Length: %u", hmac_input_size);
-    print_debug(debug_buf);
-
-    // Compute HMAC: hash (device key || data)
-    memset(computed_hash, 0, HASH_SIZE);
-    hash_result = hash(hmac_input, hmac_input_size, computed_hash);
-
-    if (hash_result != 0) {
-        char error_buf[64];
-        sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
-        print_debug(error_buf);
-        
-        // Delay and return error
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-        STATUS_LED_ERROR();
-        print_error("Failed to update subscription - hash computation error\n");
-        return -1;
-    }
-
-    print_debug("computed Signature (hex):");
-    print_hex_debug(computed_hash, HASH_SIZE);
-    print_debug("Expected Signature (hex):");
-    print_hex_debug(update->signature, HASH_SIZE);
-    print_debug("Checking for left over values");
-    print_debug("Master Key (hex):");
-    print_hex_debug(key_bytes, SUBSCRIPTION_KEY_SIZE);
-    print_debug("Device Key Input (hex):");
-    print_hex_debug(device_key_input, device_key_input_size);
     print_debug("=== END C DEBUGGING ===\n");
 
     // Securely clear the key from memory when done
@@ -609,16 +418,13 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
-        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-        //IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
+        //IPS DELAYS 5 SECONDS ON MAX SUBSCRIPTIONS
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
     }
 
-    // Persist the updated subscription to flash
     // Persist the updated subscription to flash
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
@@ -627,33 +433,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Success message with an empty body
     write_packet(SUBSCRIBE_MSG, NULL, 0);
     return 0;
-}
-
-
-
-int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, 
-                unsigned char* key, unsigned char* iv, 
-                uint8_t* plaintext) {
-    Aes aes;
-    int ret;
-    
-    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
-    if (ret != 0) return -1;
-    
-    ret = wc_AesSetKey(&aes, key, 32, iv, AES_DECRYPTION);
-    if (ret != 0) return -1;
-    
-    ret = wc_AesCbcDecrypt(&aes, plaintext, ciphertext, ciphertext_len);
-    if (ret != 0) return -1;
-    
-    // Remove padding
-    int plaintext_len = ciphertext_len;
-    while (plaintext_len > 0 && plaintext[plaintext_len-1] == 0) {
-        plaintext_len--;
-    }
-    
-    wc_AesFree(&aes);
-    return plaintext_len;
 }
 
 
@@ -692,42 +471,37 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len,
 int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     char output_buf[128] = {0};
     uint16_t encrypted_size;
-    uint16_t encrypted_size;
     channel_id_t channel;
-    uint8_t iv[BLOCK_SIZE];
+    // uint8_t iv[BLOCK_SIZE];
 
-    // Generate initialization vector (IV) for frame
-    generate_random(iv, BLOCK_SIZE);
+    // // Generate initialization vector (IV) for frame
+    // generate_random(iv, BLOCK_SIZE);
+
+    // Calculate Ciphertext size - frame size
+    uint16_t header_size = sizeof(new_frame->channel) + sizeof(new_frame->timestamp) + sizeof(new_frame->key) + sizeof(new_frame->iv);
 
     // Frame size is the size of the packet minus the size of non-frame elements
-    uint16_t total_data_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
+    uint16_t ciphertext_size = pkt_len - header_size;
 
     // Extract key (first 32 bytes)
-    unsigned char *key = new_frame->data;
+    unsigned char *key = new_frame->key;
 
     // Extract IV (next 16 bytes)
-    unsigned char *iv = new_frame->data + 32;
+    unsigned char *iv = new_frame->iv;
 
     // The rest is ciphertext
-    unsigned char *ciphertext = new_frame->data + 32 + 16;
-    encrypted_size = total_data_size - 32 - 16;
-
-    uint16_t total_data_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
-
-    // Extract key (first 32 bytes)
-    unsigned char *key = new_frame->data;
-
-    // Extract IV (next 16 bytes)
-    unsigned char *iv = new_frame->data + 32;
-
-    // The rest is ciphertext
-    unsigned char *ciphertext = new_frame->data + 32 + 16;
-    encrypted_size = total_data_size - 32 - 16;
+    unsigned char *ciphertext = new_frame->data;
+    encrypted_size = ciphertext_size;
 
     channel = new_frame->channel;
 
-    // The reference design doesn't use the timestamp, but you may want to in your design
+    // Declare timestamp variable for new frame
     timestamp_t timestamp = new_frame->timestamp;
+
+    // Add debug output
+    sprintf(output_buf, "Receiving frame for channel: %u with timestamp: %llu", 
+            channel, (unsigned long long)timestamp);
+    print_debug(output_buf);
 
     // Check that we are subscribed to the channel...
     print_debug("Checking subscription\n");
@@ -746,7 +520,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             return -1;
         }
         // before writing the bytes, decrypt
-
+        print_debug("Decrypting Frame\n");
         // Decrypt the data
         uint8_t decrypted_data[FRAME_SIZE];
         int decrypted_size;
@@ -756,19 +530,8 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             print_error("Decryption failed\n");
             return -1;
         }
-        // before writing the bytes, decrypt
-
-        // Decrypt the data
-        uint8_t decrypted_data[FRAME_SIZE];
-        int decrypted_size;
-        
-        decrypted_size = aes_decrypt(ciphertext, encrypted_size, key, iv, decrypted_data);
-        if (decrypted_size < 0) {
-            print_error("Decryption failed\n");
-            return -1;
-        }
-        
-        write_packet(DECODE_MSG, new_frame->data, FRAME_SIZE); // 
+        print_debug("Decryption Complete\n");
+        write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE); // 
         return 0;
     } else {
         //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
@@ -823,11 +586,6 @@ void init() {
         // if uart fails to initialize, do not continue to execute
         while (1);
     }
-
-    if (sizeof(decoder_id_t) > 8) {
-        print_debug("Warning: Unexpected device ID size detected\n");
-    }
-}
 
     if (sizeof(decoder_id_t) > 8) {
         print_debug("Warning: Unexpected device ID size detected\n");
