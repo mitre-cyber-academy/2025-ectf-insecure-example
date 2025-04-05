@@ -44,7 +44,7 @@ def gen_subscription(
 
     # Check if requested channel is valid
     if channel not in secrets["channels"] and channel != 0:
-        logger.error(f"Channel {channel} is not a valid channel in this deployment. Valid channels are: {secrets["channels"]}")
+        logger.error(f"Channel {channel} is not a valid channel in this deployment. Valid channels are: {secrets['channels']}")
         raise ValueError(f"Invalid channel: {channel}")
 
     # Create data buffer to be signed (device_id, start time, end time, channel)

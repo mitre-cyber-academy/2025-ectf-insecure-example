@@ -184,7 +184,7 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
-    //ensure timestamp is increasing monotonically
+    // ensure timestamp is increasing monotonically
     if (timestamp <= prev_frame_timestamp) {
         // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
         // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP
@@ -572,10 +572,16 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     print_hex_debug(computed_hash, HASH_SIZE);
     print_debug("Expected Signature (hex):");
     print_hex_debug(update->signature, HASH_SIZE);
+    print_debug("Checking for left over values");
+    print_debug("Master Key (hex):");
+    print_hex_debug(key_bytes, SUBSCRIPTION_KEY_SIZE);
+    print_debug("Device Key Input (hex):");
+    print_hex_debug(device_key_input, device_key_input_size);
     print_debug("=== END C DEBUGGING ===\n");
 
     // Securely clear the key from memory when done
     secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
+    secure_clear(device_key_input, device_key_input_size);
 
     print_debug("Verifying subscription signature...\n");
 
@@ -688,6 +694,10 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     uint16_t encrypted_size;
     uint16_t encrypted_size;
     channel_id_t channel;
+    uint8_t iv[BLOCK_SIZE];
+
+    // Generate initialization vector (IV) for frame
+    generate_random(iv, BLOCK_SIZE);
 
     // Frame size is the size of the packet minus the size of non-frame elements
     uint16_t total_data_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
@@ -717,7 +727,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     channel = new_frame->channel;
 
     // The reference design doesn't use the timestamp, but you may want to in your design
-    timestamp_t timestamp = new_frame->timestamp;
     timestamp_t timestamp = new_frame->timestamp;
 
     // Check that we are subscribed to the channel...
@@ -762,10 +771,9 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         write_packet(DECODE_MSG, new_frame->data, FRAME_SIZE); // 
         return 0;
     } else {
-
         //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
         MXC_Delay(MXC_DELAY_MSEC(5000));
-        STATUS_LED_RED();
+        STATUS_LED_ERROR();
         sprintf(
             output_buf,
             "Receiving unsubscribed channel data.  %u\n", channel);

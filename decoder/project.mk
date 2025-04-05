@@ -30,9 +30,11 @@ ENTRY=firmware_startup
 
 # ****************** eCTF Wolfssl Crypto *******************
 
-# WolfSSL Configuration
-
+# In decoder/project.mk
 VPATH += wolfssl/wolfcrypt/src
 IPATH += wolfssl
+
+# Minimal wolfSSL settings
 PROJ_CFLAGS += -DWOLFSSL_USER_SETTINGS
-PROJ_CFLAGS += -fno-strict-aliasing
+
+PROJ_CFLAGS += -DUSE_HW_CRYPTO
