@@ -11,12 +11,10 @@
 #include "host_messaging.h"
  
 // MAX78000 Hardware includes
-#include "trng.h"  // True Random Number Generator
 #include "aes.h"   // AES Hardware
 
 // Using wolfSSL for SHA-256
 #include "wolfssl/wolfcrypt/sha256.h"
-// #include "wolfssl/wolfcrypt/hmac.h"
  
 // Global variables for crypto contexts
 static int crypto_initialized = 0;
@@ -50,71 +48,6 @@ int crypto_init(void) {
      
     crypto_initialized = 1;
     print_debug("Cryptographic hardware initialized successfully");
-    return 0;
-}
- 
-/**
- * @brief Encrypt data using AES-CBC mode
- * 
- * @param plaintext Input plaintext data
- * @param len Length of data (must be multiple of BLOCK_SIZE)
- * @param key Encryption key
- * @param iv Initialization vector (16 bytes)
- * @param ciphertext Output buffer for ciphertext
- * 
- * @return 0 on success, negative value on error
- */
-int encrypt_sym_cbc(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *iv, uint8_t *ciphertext) {
-    char debug_buf[128];
-    
-    // Ensure crypto hardware is initialized
-    if (!crypto_initialized) {
-        int result = crypto_init();
-        if (result != 0) {
-            return result;
-        }
-    }
-    
-    // Ensure valid length
-    if (len <= 0 || len % BLOCK_SIZE != 0) {
-        print_debug("Invalid length for encryption");
-        return -1;
-    }
-    
-    // Set up AES request structure for ECB mode
-    mxc_aes_req_t aes_req;
-    aes_req.keySize = MXC_AES_128BITS;  // Using AES-128
-    
-    // Copy key to AES key register
-    MXC_AES_SetExtKey(key, aes_req.keySize);
-    
-    // Create a temporary block for XOR operations
-    uint8_t block[BLOCK_SIZE];
-    memcpy(block, iv, BLOCK_SIZE);  // Initialize with IV
-    
-    // Process each block in CBC mode
-    for (size_t i = 0; i < len; i += BLOCK_SIZE) {
-        // XOR plaintext with previous ciphertext (or IV for first block)
-        for (size_t j = 0; j < BLOCK_SIZE; j++) {
-            block[j] ^= plaintext[i + j];
-        }
-        
-        // Encrypt the XORed block using hardware ECB
-        aes_req.inputData = (uint32_t*)block;
-        aes_req.resultData = (uint32_t*)block;
-        aes_req.length = BLOCK_SIZE;
-        
-        int result = MXC_AES_Encrypt(&aes_req);
-        if (result != E_NO_ERROR) {
-            sprintf(debug_buf, "AES encryption failed with code %d", result);
-            print_debug(debug_buf);
-            return -2;
-        }
-        
-        // Copy encrypted block to output
-        memcpy(ciphertext + i, block, BLOCK_SIZE);
-    }
-    
     return 0;
 }
 
@@ -241,48 +174,14 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
      
     return 0;
 }
- 
-/** @brief Generate random bytes using hardware TRNG
-*/
-int generate_random(uint8_t *output, size_t len) {
-    char debug_buf[128];
-     
-    // Ensure crypto hardware is initialized
-    if (!crypto_initialized) {
-        int result = crypto_init();
-        if (result != 0) {
-            return result;
-        }
-    }
-     
-    if (output == NULL) {
-        print_debug("NULL output pointer passed to generate_random");
-        return -1;
-    }
-     
-    if (len == 0) {
-        print_debug("Zero length passed to generate_random");
-        return -2;
-    }
-     
-    // Generate random data using hardware TRNG
-    int result = MXC_TRNG_Random(output, len);
-    if (result != E_NO_ERROR) {
-        sprintf(debug_buf, "Random generation failed with code %d", result);
-        print_debug(debug_buf);
-        return -3;
-    }
-     
-    return 0;
-}
 
 /** @brief Creates HMAC object using WOLFSSL
  * 
- *  @param key
+ *  @param key 
  *  @param key_len
  *  @param message
  *  @param message_len
- *  @param hmac_output
+ *  @param hmac_output buffer of
  * 
  *  @return computed HMAC
  * 

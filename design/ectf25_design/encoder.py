@@ -61,7 +61,7 @@ class Encoder:
         iv = urandom(16)   # 16 bytes for AES block size
 
         # Use stored encryption key
-        aes = Aes(self.encryption_key, 2, iv) # AES-256 
+        aes = Aes(self.encryption_key, 2, iv) # AES-256
 
         # Pad and encrypt frame data
         padding_length = 16 - (len(frame) % 16)
