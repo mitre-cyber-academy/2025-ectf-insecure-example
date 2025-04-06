@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import struct
 import hashlib
-
+import hmac
 from loguru import logger
 
 
@@ -62,19 +62,17 @@ def gen_subscription(
     print(f"Device Key Input Length: {len(device_key_input)}")
 
     # Hash to create device key
-    # mitigates tampering
+    # Ensures valid decoder & system
     device_key = hashlib.sha256(device_key_input).digest() 
     print(f"Device Key (hex): {device_key.hex()}")
 
-    # Create HMAC input for the subscription signature
-    # Simple HMAC construction: hash(device_key || data) 
-    hmac_input = device_key + data_buffer
-    print(f"HMAC Input (hex): {hmac_input.hex()}")
-    print(f"HMAC Input Length: {len(hmac_input)}")
+    # Standard HMAC implementation
+    def generate_hmac_signature(key, data):
+        return hmac.new(key, data, hashlib.sha256).digest()
 
-    # Generate Signature
+    # Generate Signature = H((device_key ⊕ opad) || H((device_key ⊕ ipad) || data_buffer))
     # Signature will be decyphered if decoder is valid
-    signature = hashlib.sha256(hmac_input).digest()
+    signature = generate_hmac_signature(device_key, data_buffer)
     print(f"Signature (hex): {signature.hex()}")
     print(f"Final subscription length: {len(data_buffer + signature)}")
     print("=== END PYTHON DEBUGGING ===\n")

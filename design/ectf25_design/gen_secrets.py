@@ -36,6 +36,8 @@ def gen_secrets(channels: list[int]) -> bytes:
     # random 32 byte value is converted to hex (64 digits)
     subscription_key = os.urandom(32).hex()
 
+    MAC_key = os.urandom(32).hex()
+
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
@@ -43,6 +45,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "channels": channels,
         "encryption_Key": encryption_key,
         "subscription_Key": subscription_key,
+        "MAC_Key": MAC_key,
     }
 
     return json.dumps(secrets).encode()
