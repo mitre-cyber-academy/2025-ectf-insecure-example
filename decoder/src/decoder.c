@@ -63,9 +63,9 @@
 typedef struct {
     channel_id_t channel;
     timestamp_t timestamp;
-    uint8_t key[32];               // Encryption Key
     uint8_t iv[16];                // Initialization Vector
-    uint8_t data[];                // Frame Cipher
+    uint8_t auth_tag[HASH_SIZE];   // Buffer for authentication
+    uint8_t data[];              // Holds data frame data
 } frame_packet_t;
 
 typedef struct {
@@ -333,7 +333,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     sprintf(debug_buf, "Device Key Input Length: %u", device_key_input_size);
     print_debug(debug_buf);
 
-    // Hash to create device key
+    // Hash to create device key (master key + device ID)
     memset(device_key, 0, HASH_SIZE);
     int hash_result = hash(device_key_input, device_key_input_size, device_key);
 
@@ -347,29 +347,11 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         print_error("Failed to update subscription - hash computation error\n");
         return -1;
     }
-
     print_debug("Device Key (hex):");
     print_hex_debug(device_key, HASH_SIZE);
 
-    // Create HMAC input buffer
-    uint32_t hmac_input_size = HASH_SIZE + sizeof(verify_buffer);
-    uint8_t hmac_input[hmac_input_size];
-
-    // Initialize HMAC input
-    memset(hmac_input, 0, hmac_input_size);
-
-    // Copy data
-    memcpy(hmac_input, device_key, HASH_SIZE);
-    memcpy(hmac_input + HASH_SIZE, verify_buffer, sizeof(verify_buffer));
-
-    print_debug("HMAC Input (hex):");
-    print_hex_debug(hmac_input, hmac_input_size);
-    sprintf(debug_buf, "HMAC Input Length: %u", hmac_input_size);
-    print_debug(debug_buf);
-
-    // Compute HMAC: hash (device key || data)
-    memset(computed_hash, 0, HASH_SIZE);
-    hash_result = hash(hmac_input, hmac_input_size, computed_hash);
+    // Compute HMAC: H((device key ⊕ opad) || H((device key ⊕ ipad) || verify buffer))
+    hash_result = compute_hmac(device_key, HASH_SIZE, verify_buffer, sizeof(verify_buffer), computed_hash);
 
     if (hash_result != 0) {
         char error_buf[64];
@@ -435,7 +417,16 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     return 0;
 }
 
-
+/** @brief AES Decryption function using wolfSSL
+ * 
+ *  @param ciphertext
+ *  @param ciphertext_len
+ *  @param key
+ *  @param iv
+ *  @param plaintext
+ * 
+ *  @return plaintext_len to be compared
+ */
 int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, 
                 unsigned char* key, unsigned char* iv, 
                 uint8_t* plaintext) {
@@ -445,7 +436,7 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len,
     ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
     if (ret != 0) return -1;
     
-    ret = wc_AesSetKey(&aes, key, 32, iv, AES_DECRYPTION);
+    ret = wc_AesSetKey(&aes, key, ENCRYPTION_KEY_SIZE, iv, AES_DECRYPTION);
     if (ret != 0) return -1;
     
     ret = wc_AesCbcDecrypt(&aes, plaintext, ciphertext, ciphertext_len);
@@ -470,47 +461,118 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len,
 */
 int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     char output_buf[128] = {0};
-    uint16_t encrypted_size;
-    channel_id_t channel;
-    // uint8_t iv[BLOCK_SIZE];
+    char debug_buf[128];
 
-    // // Generate initialization vector (IV) for frame
-    // generate_random(iv, BLOCK_SIZE);
-
-    // Calculate Ciphertext size - frame size
-    uint16_t header_size = sizeof(new_frame->channel) + sizeof(new_frame->timestamp) + sizeof(new_frame->key) + sizeof(new_frame->iv);
-
-    // Frame size is the size of the packet minus the size of non-frame elements
-    uint16_t ciphertext_size = pkt_len - header_size;
-
-    // Extract key (first 32 bytes)
-    unsigned char *key = new_frame->key;
-
-    // Extract IV (next 16 bytes)
-    unsigned char *iv = new_frame->iv;
-
-    // The rest is ciphertext
-    unsigned char *ciphertext = new_frame->data;
-    encrypted_size = ciphertext_size;
-
-    channel = new_frame->channel;
-
-    // Declare timestamp variable for new frame
-    timestamp_t timestamp = new_frame->timestamp;
+    // Declaring variables for new frame
+    channel_id_t channel = new_frame->channel; // channel of new frame
+    timestamp_t timestamp = new_frame->timestamp; // timestamp of new frame
 
     // Add debug output
     sprintf(output_buf, "Receiving frame for channel: %u with timestamp: %llu", 
             channel, (unsigned long long)timestamp);
     print_debug(output_buf);
 
-    // Check that we are subscribed to the channel...
-    print_debug("Checking subscription\n");
+    print_debug("\n===== RAW PACKET DATA =====");
+    print_hex_debug((uint8_t*)new_frame, pkt_len);
+    print_debug("===== END RAW PACKET DATA =====\n");
 
+    // Calculate Components' Sizes
+    print_debug("Packet structure analysis:");
+    sprintf(debug_buf, "Total packet length: %u bytes", pkt_len);
+    print_debug(debug_buf);
+
+    // Header size - Ciphertext size - data
+    uint16_t header_size = sizeof(new_frame->channel) 
+                        + sizeof(new_frame->timestamp) 
+                        + sizeof(new_frame->iv) + sizeof(new_frame->auth_tag);
+    sprintf(debug_buf, "Header size: %u bytes", header_size);
+    print_debug(debug_buf);
+    // Ciphertext size - the size of the packet minus 
+    // the size of non-frame elements (header)
+    uint16_t ciphertext_size = pkt_len - header_size;
+    sprintf(debug_buf, "Calculated ciphertext size: %u bytes", ciphertext_size);
+    print_debug(debug_buf);
+
+    // Validate total packet length
+    if (pkt_len < header_size) {
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Packet too small to contain authentication tag\n");
+        return -1;
+    }
+
+    // Extract Components
+    unsigned char *iv = new_frame->iv; // Extract IV (16 bytes)
+    unsigned char *ciphertext = new_frame->data; // Extract Ciphertext
+    unsigned char *auth_tag = new_frame->auth_tag; // Extract auth_tag (HMAC)
+
+    // Dump memory locations for debugging
+    sprintf(debug_buf, "Frame packet starts at: %p", new_frame);
+    print_debug(debug_buf);
+    sprintf(debug_buf, "IV starts at: %p", iv);
+    print_debug(debug_buf);
+    sprintf(debug_buf, "Auth tag should start at: %p", auth_tag);
+    print_debug(debug_buf);
+    sprintf(debug_buf, "Data starts at: %p", ciphertext);
+    print_debug(debug_buf);
+    
+    // Dump auth tag content
+    print_debug("Auth tag content (hex):");
+    print_hex_debug(auth_tag, HASH_SIZE);
+
+    // Verify HMAC first
+    uint8_t computed_hmac[HASH_SIZE];
+    uint8_t hmac_input[sizeof(channel_id_t) + sizeof(timestamp_t) + 16 + ciphertext_size];
+
+    // Construct data in same manner as HMAC in encoder
+    memcpy(hmac_input, &new_frame->channel, sizeof(channel_id_t));
+    memcpy(hmac_input + sizeof(channel_id_t), &new_frame->timestamp, sizeof(timestamp_t));
+    memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t), iv, 16);
+    memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t) + 16, ciphertext, ciphertext_size);
+
+    // Debug hmac input
+    print_debug("hmac_input:");
+    print_hex_debug(hmac_input, sizeof(hmac_input));
+
+    // Get encryption key from secrets
+    uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
+    load_encryption_key(encryption_key);
+    print_debug("encryption_key:");
+    print_hex_debug(encryption_key, ENCRYPTION_KEY_SIZE);
+
+    // Get MAC key from secrets
+    uint8_t mac_key [MAC_KEY_SIZE];
+    load_MAC_key(mac_key);
+    print_debug("MAC_key: ");
+    print_hex_debug(mac_key, MAC_KEY_SIZE);
+
+    // Compute HMAC
+    compute_hmac(mac_key, MAC_KEY_SIZE, hmac_input, sizeof(hmac_input), computed_hmac);
+
+    // Debug key_input & computed hmac
+    print_debug("Computed_hash:");
+    print_hex_debug(computed_hmac, sizeof(computed_hmac));
+    print_debug("auth_tag:");
+    print_hex_debug(auth_tag, HASH_SIZE);
+
+
+    // Verify HMAC in constant time
+    if (constant_time_memcmp(computed_hmac, auth_tag, HASH_SIZE) != 0) {
+        secure_clear(mac_key, MAC_KEY_SIZE);
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        STATUS_LED_ERROR();
+        print_error("Failed to authenticate frame - invalid signature\n");
+        return -1;
+    } 
+    secure_clear(mac_key, MAC_KEY_SIZE); // clear mac key buffer
     
     //CHECKS IF SECURITY CHECKS PASSED
-    
+
+    // Check that we are subscribed to the channel...
+    print_debug("Checking subscription\n");
     if (is_subscribed(channel)) {
         print_debug("Subscription Valid\n");
+
         print_debug("Checking timestamp\n");
         if (timestamp_valid(timestamp, channel)) {
             print_debug("Timestamp Valid\n");
@@ -519,22 +581,27 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             //timestamp errors are printed in timestamp_valid()
             return -1;
         }
-        // before writing the bytes, decrypt
+
+        // Before writing the bytes, decrypt
         print_debug("Decrypting Frame\n");
-        // Decrypt the data
         uint8_t decrypted_data[FRAME_SIZE];
         int decrypted_size;
-        
-        decrypted_size = aes_decrypt(ciphertext, encrypted_size, key, iv, decrypted_data);
+
+        decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
         if (decrypted_size < 0) {
+            secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); // clear encryption key
+            // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
+            MXC_Delay(MXC_DELAY_MSEC(5000));
+            STATUS_LED_ERROR();
             print_error("Decryption failed\n");
             return -1;
         }
+        secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); // clear encryption key
         print_debug("Decryption Complete\n");
         write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE); // 
         return 0;
     } else {
-        //IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
+        // IPS DELAYS 5 SECONDS ON INVALID SUBSCRIPTION
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         sprintf(
@@ -582,13 +649,15 @@ void init() {
     // Initialize the uart peripheral to enable serial I/O
     ret = uart_init();
     if (ret < 0) {
+        MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         // if uart fails to initialize, do not continue to execute
         while (1);
     }
 
     if (sizeof(decoder_id_t) > 8) {
-        print_debug("Warning: Unexpected device ID size detected\n");
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+        print_error("Warning: Unexpected device ID size detected\n");
     }
 }
 

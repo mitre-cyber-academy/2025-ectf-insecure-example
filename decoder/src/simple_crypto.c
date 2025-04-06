@@ -16,6 +16,7 @@
 
 // Using wolfSSL for SHA-256
 #include "wolfssl/wolfcrypt/sha256.h"
+// #include "wolfssl/wolfcrypt/hmac.h"
  
 // Global variables for crypto contexts
 static int crypto_initialized = 0;
@@ -272,5 +273,85 @@ int generate_random(uint8_t *output, size_t len) {
         return -3;
     }
      
+    return 0;
+}
+
+/** @brief Creates HMAC object using WOLFSSL
+ * 
+ *  @param key
+ *  @param key_len
+ *  @param message
+ *  @param message_len
+ *  @param hmac_output
+ * 
+ *  @return computed HMAC
+ * 
+ *  @note Standard HMAC implementation (H is the hash function, K is the key)
+ *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
+ *  where K' is the key padded to block size and m is the message
+ */
+int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output) {
+    uint8_t k_prime[HMAC_BLOCK_SIZE];
+    uint8_t k_opad[HMAC_BLOCK_SIZE];
+    uint8_t k_ipad[HMAC_BLOCK_SIZE];
+    uint8_t inner_hash[HASH_SIZE];
+
+    // Debug original inputs
+    print_debug("HMAC Key (hex):");
+    print_hex_debug(key, key_len);
+    print_debug("HMAC Message (hex):");
+    print_hex_debug(message, message_len);
+
+    // Prepare the key
+    memset(k_prime, 0, HMAC_BLOCK_SIZE); // Initialize buffer
+    if (key_len > HMAC_BLOCK_SIZE) {     // if key > block size
+        hash(key, key_len, k_prime);     // hash it
+    } else {
+        memcpy(k_prime, key, key_len);   // Copy into memory
+    }
+
+    print_debug("k_prime:");
+    print_hex_debug(k_prime, key_len);
+
+    // Prepare padded keys
+    for (int i=0; i < HMAC_BLOCK_SIZE; i++) { // Pad with zeros if key < block size
+        k_opad[i] = k_prime[i] ^ OPAD;
+        k_ipad[i] = k_prime[i] ^ IPAD;
+    }
+
+    print_debug("K XOR ipad:");
+    print_hex_debug(k_ipad, HMAC_BLOCK_SIZE);
+
+    // Inner hash: H((K' ⊕ ipad) || m)
+    uint8_t *inner_data = malloc(HMAC_BLOCK_SIZE + message_len);
+    memcpy(inner_data, k_ipad, HMAC_BLOCK_SIZE);
+    memcpy(inner_data + HMAC_BLOCK_SIZE, message, message_len);
+
+    print_debug("Inner data (K' ⊕ ipad || message):");
+    print_hex_debug(inner_data, HMAC_BLOCK_SIZE + message_len);
+
+    hash(inner_data, HMAC_BLOCK_SIZE + message_len, inner_hash);
+    free(inner_data);
+
+    print_debug("inner_hash:");
+    print_hex_debug(inner_hash, HASH_SIZE);
+
+    print_debug("K XOR opad:");
+    print_hex_debug(k_opad, HMAC_BLOCK_SIZE);
+
+    // Outer hash: H((K' ⊕ opad) || inner_hash)
+    uint8_t *outer_data = malloc(HMAC_BLOCK_SIZE + HASH_SIZE);
+    memcpy(outer_data, k_opad, HMAC_BLOCK_SIZE);
+    memcpy(outer_data + HMAC_BLOCK_SIZE, inner_hash, HASH_SIZE);
+
+    print_debug("Outer data (K' ⊕ opad || inner_hash):");
+    print_hex_debug(outer_data, HMAC_BLOCK_SIZE + HASH_SIZE);
+
+    hash(outer_data, HMAC_BLOCK_SIZE + HASH_SIZE, hmac_output);
+    free(outer_data);
+
+    print_debug("hmac_output:");
+    print_hex_debug(hmac_output, HASH_SIZE);
+
     return 0;
 }

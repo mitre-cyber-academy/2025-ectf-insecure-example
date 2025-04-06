@@ -35,10 +35,23 @@ def main():
             print(f"Available keys: {list(secrets_data.keys())}")
             return 1
         
-        # print(f"Successfully extracted subscription key: {subscription_key_hex[:8]}...")
+        # Extract encryption key
+        encryption_key_hex = secrets_data.get('encryption_Key')
+        if not encryption_key_hex:
+            print(f"Error: Could not find 'encryption_key' in {SECRETS_FILE}")
+            return 1
+
+        # Extract MAC key
+        mac_key_hex = secrets_data.get('MAC_Key')
+        if not mac_key_hex:
+            print(f"Error: Could not find 'MAC_key' in {SECRETS_FILE}")
+
+        print(f"Successfully extracted keys: sub-{subscription_key_hex[:8]}..., enc-{encryption_key_hex[:8]}..., MAC-{mac_key_hex[:8]}...")
         
         # Convert hex string to bytes
         subscription_key = bytes.fromhex(subscription_key_hex)
+        encryption_key = bytes.fromhex(encryption_key_hex)
+        mac_key = bytes.fromhex(mac_key_hex)
         
         # Generate the header file
         with open(OUTPUT_HEADER, 'w') as f:
@@ -56,6 +69,8 @@ def main():
             
             # Required includes
             f.write("#include <stdint.h>\n\n")
+
+            f.write("/****************************** Define Keys *******************************/\n\n")
             
             # Define the subscription key as a byte array
             f.write("/**\n")
@@ -74,34 +89,90 @@ def main():
             
             f.write("".join(bytes_str))
             f.write("\n};\n\n")
-            
-            # Define the key size constant
-            f.write("#define SUBSCRIPTION_KEY_SIZE (sizeof(SUBSCRIPTION_KEY))\n\n")
-            
-            # Create a simple getter function for individual bytes
-            f.write("/** @brief Function to retrieve subscription key bytes\n")
-            f.write(" * \n")
-            f.write(" * @param index Index of the byte to retrieve\n")
-            f.write(" * \n")
-            f.write(" * @return The key byte at the specified index\n")
+
+            # Define Encryption key as a byte array
+            f.write("/**\n")
+            f.write(" * Encryption key extracted from secrets.json\n")
             f.write(" */\n")
-            f.write("static inline uint8_t get_key_byte(int index) {\n")
-            f.write("    return SUBSCRIPTION_KEY[index];\n")
-            f.write("}\n\n")
+            f.write("static const uint8_t ENCRYPTION_KEY[] = {\n    ")
+
+            # Format the bytes into rows of 8 for readability
+            bytes_str = []
+            for i, b in enumerate(encryption_key):
+                if i > 0 and i % 8 == 0:
+                    bytes_str.append("\n    ")
+                bytes_str.append(f"0x{b:02x}")
+                if i < len(encryption_key) - 1:
+                    bytes_str.append(", ")
             
+            f.write("".join(bytes_str))
+            f.write("\n};\n\n")
+
+            
+            # Define MAC key as a byte array
+            f.write("/**\n")
+            f.write(" * MAC key extracted from secrets.json\n")
+            f.write(" */\n")
+            f.write("static const uint8_t MAC_KEY[] = {\n    ")
+
+            # Format the bytes into rows of 8 for readability
+            bytes_str = []
+            for i, b in enumerate(mac_key):
+                if i > 0 and i % 8 == 0:
+                    bytes_str.append("\n    ")
+                bytes_str.append(f"0x{b:02x}")
+                if i < len(mac_key) - 1:
+                    bytes_str.append(", ")
+            
+            f.write("".join(bytes_str))
+            f.write("\n};\n\n")
+
+
+            f.write("/***************************** Define Key Sizes *****************************/\n\n")
+            
+            # Define the key size constants
+            f.write("#define SUBSCRIPTION_KEY_SIZE (sizeof(SUBSCRIPTION_KEY))\n\n")
+            f.write("#define ENCRYPTION_KEY_SIZE (sizeof(ENCRYPTION_KEY))\n\n")
+            f.write("#define MAC_KEY_SIZE (sizeof(MAC_KEY))\n\n")
+            
+            
+            f.write("/*************************** Extraction Functions ****************************/\n\n")
+
+
             # Add the load_subscription_key function for convenience
             f.write("/** @brief Loads the entire subscription key into a buffer\n")
             f.write(" * \n")
             f.write(" * @param key_buffer Buffer to receive the key (must be at least SUBSCRIPTION_KEY_SIZE bytes)\n")
             f.write(" */\n")
             f.write("static inline void load_subscription_key(uint8_t *key_buffer) {\n")
-            f.write("    // In this simple implementation, we can just copy the key directly\n")
             f.write("    for (int i = 0; i < SUBSCRIPTION_KEY_SIZE; i++) {\n")
-            f.write("        key_buffer[i] = get_key_byte(i);\n")
+            f.write("        key_buffer[i] = SUBSCRIPTION_KEY[i];\n")
+            f.write("    }\n")
+            f.write("}\n\n")
+
+            f.write("/** @brief Loads the entire encryption key into a buffer\n")
+            f.write(" * \n")
+            f.write(" * @param key_buffer Buffer to receive the key (must be at least ENCRYPTION_KEY_SIZE bytes)\n")
+            f.write(" */\n")
+            f.write("static inline void load_encryption_key(uint8_t *key_buffer) {\n")
+            f.write("    for (int i = 0; i < ENCRYPTION_KEY_SIZE; i++) {\n")
+            f.write("        key_buffer[i] = ENCRYPTION_KEY[i];\n")
+            f.write("    }\n")
+            f.write("}\n\n")
+
+            f.write("/** @brief Loads the entire MAC key into a buffer\n")
+            f.write(" * \n")
+            f.write(" * @param key_buffer Buffer to receive the key (must be at least MAC_KEY_SIZE bytes)\n")
+            f.write(" */\n")
+            f.write("static inline void load_MAC_key(uint8_t *key_buffer) {\n")
+            f.write("    for (int i = 0; i < MAC_KEY_SIZE; i++) {\n")
+            f.write("        key_buffer[i] = MAC_KEY[i];\n")
             f.write("    }\n")
             f.write("}\n\n")
             
-            # Add a utility function for securely clearing sensitive data
+            f.write("/*************************** Deletion Functions ****************************/\n\n")
+
+            # A utility function for securely clearing sensitive data
             f.write("/** @brief Securely clears a memory buffer (e.g., after using a key)\n")
             f.write(" * \n")
             f.write(" * @param buffer The buffer to clear\n")

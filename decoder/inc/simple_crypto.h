@@ -16,6 +16,9 @@
  #define BLOCK_SIZE 16
  #define KEY_SIZE 16
  #define HASH_SIZE 32  // SHA-256 produces a 32-byte hash
+ #define HMAC_BLOCK_SIZE 64 // SHA-256 block size
+ #define OPAD 0x5c
+ #define IPAD 0x36
  
 /******************************** FUNCTION PROTOTYPES ********************************/
 
@@ -81,5 +84,22 @@ int hash(void *data, size_t len, uint8_t *hash_out);
  *  @return 0 on success, non-zero on failure
 */ 
 int generate_random(uint8_t *output, size_t len);
- 
+
+/** @brief Creates HMAC object using WOLFSSL
+ * 
+ *  @param key
+ *  @param key_len
+ *  @param message
+ *  @param message_len
+ *  @param hmac_output
+ * 
+ *  @return computed HMAC
+ * 
+ *  @note Standard HMAC implementation (H is the hash function, K is the key)
+ *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
+ *  where K' is the key padded to block size and m is the message
+ */
+ int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output);
+
+
 #endif // ECTF_CRYPTO_HW_H
