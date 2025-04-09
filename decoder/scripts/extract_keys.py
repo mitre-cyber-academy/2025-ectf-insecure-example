@@ -43,7 +43,7 @@ def debug_path(path):
             
             # Try to identify file type
             if header.startswith(b'{'):
-                print(f"  Appears to be a JSON file (starts with '{')")
+                print(f"  Appears to be a JSON file (starts with brace)")
             elif header.startswith(b'PK'):
                 print(f"  Appears to be a ZIP file")
             else:
