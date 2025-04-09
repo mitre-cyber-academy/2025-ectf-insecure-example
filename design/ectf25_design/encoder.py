@@ -75,11 +75,8 @@ class Encoder:
         # Create HMAC using MAC_key
         auth_tag = hmac.new(self.MAC_key, hmac_input, hashlib.sha256).digest()
         
-
-        # 16 + 32 + 80 bytes = 128 bytes
         encrypted_frame = iv + auth_tag + ciphertext
 
-        # 12 + 120 bytes = 152 bytes
         return struct.pack("<IQ", channel, timestamp) + encrypted_frame
 
 

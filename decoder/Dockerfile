@@ -19,8 +19,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     binutils-arm-none-eabi \
     make \
     python3 \
-    # # this creates proper Python links
-    # python-is-python3 \  
     git \
     wget \
     libtool \
