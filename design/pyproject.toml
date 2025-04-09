@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 
 dependencies = [
     "loguru",
-    "pycryptodome",
+    "wolfcrypt",
 ]
 
 [tool.black]
