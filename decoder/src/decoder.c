@@ -24,6 +24,7 @@
 #include "secret_keys.h"
 #include "user_settings.h"
 #include "simple_crypto.h"
+#include "trng.h"
 
 /**********************************************************
  ******************* PRIMITIVE TYPES **********************
@@ -220,6 +221,61 @@ static int constant_time_memcmp(const void* a, const void* b, size_t len) {
     return (result != 0);
 }
 
+/**
+ * @brief Add noise to power consumption to protect against power analysis attacks
+ * 
+ * This function executes random operations to mask power analysis during sensitive/cryptographic operations.
+ * 
+ */
+static void add_power_noise(void) {
+    
+
+    // Create volatile buffers that won't be optimized out by compiler
+    volatile uint8_t noise_buffer[32];
+    volatile uint8_t result_buffer[32];
+    
+    MXC_TRNG_Init();
+
+    // Use hardware TRNG to get random data
+    for (int i = 0; i < sizeof(noise_buffer); i++) {
+        MXC_TRNG_Random((uint8_t*)&noise_buffer[i], 1);
+    }
+    
+    MXC_TRNG_Shutdown();
+
+    // Perform dummy arithmetic operations that consume power in a data-independent manner
+    for (int i = 0; i < sizeof(noise_buffer); i++) {
+        // Mix operations that consume different power
+        result_buffer[i] = (noise_buffer[i] ^ 0x55);
+        result_buffer[i] += (noise_buffer[(i+7) % sizeof(noise_buffer)] & 0xAA);
+        result_buffer[i] *= (noise_buffer[(i+13) % sizeof(noise_buffer)] | 0x33);
+        
+
+        // Add compiler memory barriers to prevent optimization
+        __asm__ volatile("" : : : "memory");
+        
+
+        // Ensure variable number of operations to create timing jitter
+        uint8_t iterations = (noise_buffer[i] & 0x07) + 1;
+        for (uint8_t j = 0; j < iterations; j++) {
+            result_buffer[i] ^= (result_buffer[(i+j) % sizeof(result_buffer)] + j);
+        }
+
+    }
+    
+    // Force use of results to prevent compiler optimizations
+    uint8_t checksum = 0;
+    for (int i = 0; i < sizeof(result_buffer); i++) {
+        checksum ^= result_buffer[i];
+    }
+    
+    // Use the checksum in a way that doesn't affect program logic
+    // but prevents the compiler from removing the code
+    if (checksum == 0xFF) {
+        // This branch almost never executes, but compiler can't prove it ;)
+        __asm__ volatile("nop");
+    }
+}
 
 /**********************************************************
  ********************* CORE FUNCTIONS *********************
@@ -299,18 +355,22 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     memcpy(verify_buffer + sizeof(decoder_id_t) + sizeof(timestamp_t) * 2,
         &update->channel, sizeof(channel_id_t));
 
-    // Get subscription/master key using the load_subscription_key function
+    // Get subscription/master key using the load_subscription_key 
+    // mask power signal
+    add_power_noise();
     uint8_t key_bytes[SUBSCRIPTION_KEY_SIZE];
     load_subscription_key(key_bytes);
-
+    add_power_noise();
+    // TODO: should any of this before HMAC have power noise?
     // Convert device ID to bytes (similar to Python format)
     uint8_t device_id_bytes[sizeof(decoder_id_t)]; // buffer for device id
     memcpy(device_id_bytes, &update->decoder_id, sizeof(decoder_id_t));
 
+    add_power_noise();
     // Create device-specific key input buffer
     uint32_t device_key_input_size = SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t);
     uint8_t device_key_input[SUBSCRIPTION_KEY_SIZE + sizeof(decoder_id_t)];
-
+    add_power_noise();
     // Initialize device key input 
     memset(device_key_input, 0, device_key_input_size);
     memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE); // Copy data
@@ -320,9 +380,12 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Hash to create device key (master key + device ID)
     memset(device_key, 0, HASH_SIZE);
     int hash_result = hash(device_key_input, device_key_input_size, device_key);
+    add_power_noise();
+
     // Securely clear the key from memory when done
     secure_zero_memory(device_key_input, device_key_input_size);
     if (hash_result != 0) {
+        add_power_noise();
         char error_buf[64];
         sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
         print_debug(error_buf);
@@ -332,9 +395,11 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     }
 
     // Compute HMAC: H((device key ⊕ opad) || H((device key ⊕ ipad) || verify buffer))
+    add_power_noise();
     hash_result = compute_hmac(device_key, HASH_SIZE, verify_buffer, sizeof(verify_buffer), computed_hash);
 
     if (hash_result != 0) {
+        add_power_noise();
         char error_buf[64];
         sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
         print_debug(error_buf);
@@ -343,7 +408,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         return -1;
     }
 
-
+    add_power_noise();
 
     // Verify the computed signature in constant time
     if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
@@ -425,20 +490,24 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     unsigned char *auth_tag = new_frame->auth_tag; // Extract auth_tag (HMAC)
 
     // FIRST, VERIFY HMAC
-
+    add_power_noise();
     // Create HMAC buffers
+    
     uint8_t computed_hmac[HASH_SIZE];
     uint8_t hmac_input[sizeof(channel_id_t) + sizeof(timestamp_t) + 16 + ciphertext_size];
 
     // Construct data in same manner as HMAC in encoder
+    add_power_noise();
     memcpy(hmac_input, &new_frame->channel, sizeof(channel_id_t));
     memcpy(hmac_input + sizeof(channel_id_t), &new_frame->timestamp, sizeof(timestamp_t));
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t), iv, 16);
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t) + 16, ciphertext, ciphertext_size);
 
     // Get MAC key from secrets
+    add_power_noise();
     uint8_t mac_key [MAC_KEY_SIZE];
     load_mac_key(mac_key);
+    add_power_noise();
 
     // Compute HMAC
     compute_hmac(mac_key, MAC_KEY_SIZE, hmac_input, sizeof(hmac_input), computed_hmac);
@@ -469,16 +538,14 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
 
         // Create decryption buffer
         uint8_t decrypted_data[FRAME_SIZE];
-        int decrypted_size; // Tracks decryption process's completion
+        int decrypted_size;
 
-        // Get encryption key from secrets
-        uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
-        load_encryption_key(encryption_key);
+        add_power_noise();
 
         decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
         secure_zero_memory(encryption_key, ENCRYPTION_KEY_SIZE); // Clear encryption key buffer
         if (decrypted_size < 0) {
-
+            add_power_noise();
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
             MXC_Delay(MXC_DELAY_MSEC(5000));
 
@@ -486,6 +553,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             print_error("Decryption failed\n");
             return -1;
         }
+        add_power_noise();
         // Write decoded frame to host computer (TV)
         write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE);
         return 0;
@@ -506,6 +574,7 @@ void init() {
 
     // Initialize the flash peripheral to enable access to persistent memory
     flash_simple_init();
+
 
     // Read starting flash values into our flash status struct
     flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));

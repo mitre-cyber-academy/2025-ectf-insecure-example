@@ -21,6 +21,7 @@
 // Using wolfSSL for SHA-256 & AES
 #include "wolfssl/wolfcrypt/sha256.h"
 #include <wolfssl/wolfcrypt/aes.h>
+#include "trng.h"
 
 /***********************************************************************************************************
  @brief AES Decryption function using wolfSSL
