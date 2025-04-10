@@ -367,7 +367,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     uint8_t key_bytes[SUBSCRIPTION_KEY_SIZE];
     load_subscription_key(key_bytes);
     add_power_noise();
-
+    // TODO: should any of this before HMAC have power noise?
     // Convert device ID to bytes (similar to Python format)
     uint8_t device_id_bytes[sizeof(decoder_id_t)]; // buffer for device id
     memcpy(device_id_bytes, &update->decoder_id, sizeof(decoder_id_t));
@@ -501,30 +501,37 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     uint8_t hmac_input[sizeof(channel_id_t) + sizeof(timestamp_t) + 16 + ciphertext_size];
 
     // Construct data in same manner as HMAC in encoder
+    add_power_noise();
     memcpy(hmac_input, &new_frame->channel, sizeof(channel_id_t));
     memcpy(hmac_input + sizeof(channel_id_t), &new_frame->timestamp, sizeof(timestamp_t));
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t), iv, 16);
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t) + 16, ciphertext, ciphertext_size);
 
     // Get encryption key from secrets
+    add_power_noise();
     uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
     load_encryption_key(encryption_key);
 
+
     // Get MAC key from secrets
+
     uint8_t mac_key [MAC_KEY_SIZE];
     load_mac_key(mac_key);
+    add_power_noise();
 
     // Compute HMAC
     compute_hmac(mac_key, MAC_KEY_SIZE, hmac_input, sizeof(hmac_input), computed_hmac);
-
+    add_power_noise();
     // Verify HMAC in constant time
     if (constant_time_memcmp(computed_hmac, auth_tag, HASH_SIZE) != 0) {
+        add_power_noise();
         secure_clear(mac_key, MAC_KEY_SIZE);
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         print_error("Failed to authenticate frame - invalid signature\n");
         return -1;
-    } 
+    }
+    add_power_noise();
     secure_clear(mac_key, MAC_KEY_SIZE); // clear mac key buffer
     
     //CHECKS IF SECURITY CHECKS PASSED
@@ -542,10 +549,12 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         uint8_t decrypted_data[FRAME_SIZE];
         int decrypted_size;
 
+        add_power_noise();
         decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
         if (decrypted_size < 0) {
 
             // clear encryption key
+            add_power_noise();
             secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); 
 
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
@@ -557,6 +566,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         }
 
         // clear encryption key
+        add_power_noise();
         secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); 
         write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE); // 
         return 0;
