@@ -1,9 +1,17 @@
-/** @file "simple_crypto.c"
-*   @author Crypto Caballero
-*   @brief Source file holding cryptographic efforts performed by FIU's 2025 eCTF team.
-*   @date 2025
-*
-*/
+/*****FIU MITRE eCTF 2025********************************************
+*                                                                  *
+*    simple_crypto.c                                               *
+*                                                                  *
+*   Author: Crypto Caballeros                                      *
+*   Date: 2025                                                     *
+*   Description: Source file holding cryptographic efforts         *
+*        preformed by FIU's 2025 eCTF team                         *
+*                                                                  *
+*******************************************************************/
+
+
+
+/******************INCLUDES*************************************** */
 
 #include <stdint.h>
 #include <string.h>
@@ -14,16 +22,18 @@
 #include "wolfssl/wolfcrypt/sha256.h"
 #include <wolfssl/wolfcrypt/aes.h>
 
-/** @brief AES Decryption function using wolfSSL
- * 
- *  @param ciphertext A pointer to a buffer of length ciphertext_len containing ciphertext from encoder
- *  @param ciphertext_len Legth of ciphertext
- *  @param key A pointer to a buffer containing the encryption key to be used in AES
- *  @param iv A pointer to a buffer containing the Initialization vector (IV) to be used in AES
- *  @param plaintext A pointer to a buffer containing the output of decryption, plaintext
- * 
- *  @return plaintext_len for error messages
- */
+/***********************************************************************************************************
+ @brief AES Decryption function using wolfSSL
+ 
+  @param ciphertext A pointer to a buffer of length ciphertext_len containing ciphertext from encoder
+  @param ciphertext_len Legth of ciphertext
+  @param key A pointer to a buffer containing the encryption key to be used in AES
+  @param iv A pointer to a buffer containing the Initialization vector (IV) to be used in AES
+  @param plaintext A pointer to a buffer containing the output of decryption, plaintext
+ 
+  @return plaintext_len for error messages
+ ************************************************************************************************************/
+
 int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, unsigned char* iv, uint8_t* plaintext) {
     Aes aes;
     int ret;
@@ -94,7 +104,8 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
     return 0;
 }
 
-/** @brief Creates HMAC object using wolfSSL hash function
+/*******************************************************************************************************
+ *  @brief Creates HMAC object using wolfSSL hash function
  * 
  *  @param key A pointer to a buffer of length key_len containing key for HMAC
  *  @param key_len The length of the key to be used for HMAC
@@ -107,7 +118,8 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
  *  @note Standard HMAC implementation (H is the hash function, K is the key)
  *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
  *  where K' is the key padded to block size and m is the message
- */
+ ********************************************************************************************************/
+ 
 int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output) {
     uint8_t k_prime[HMAC_BLOCK_SIZE];
     uint8_t k_opad[HMAC_BLOCK_SIZE];

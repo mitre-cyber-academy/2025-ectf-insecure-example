@@ -1,8 +1,14 @@
 """
-Author: Crypto Caballeros
-Date: 2025
-
-This file generates subscriptions to be used in a satllite TV system.
+*****FIU MITRE eCTF 2025********************************************
+*                                                                  *
+*    gen_subscriptions.py                                          *
+*                                                                  *
+*   Author: Crypto Caballeros                                      *
+*   Date: 2025                                                     *
+*   Description: This file generates subscriptions to be used in   *
+*       the sattelite TV system                                    *
+*                                                                  *
+********************************************************************
 """
 
 import argparse

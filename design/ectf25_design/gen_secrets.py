@@ -1,8 +1,14 @@
 """
-Author: Crypto Caballeros
-Date: 2025
-
-This file is used to generate secrets for a deployement of a satellite TV system.
+*****FIU MITRE eCTF 2025********************************************
+*                                                                  *
+*    gen_secrets.py                                                *
+*                                                                  *
+*   Author: Crypto Caballeros                                      *
+*   Date: 2025                                                     *
+*   Description: This file is used to generate secrets for a       *
+*   deployement of a satellite TV system.                          *
+*                                                                  *
+********************************************************************
 """
 
 import argparse
@@ -14,7 +20,9 @@ from loguru import logger
 
 
 def gen_secrets(channels: list[int]) -> bytes:
-    """Generate the contents secrets file
+
+    """
+    Generate the contents secrets file
 
     This will be passed to the Encoder, ectf25_design.gen_subscription, and the build
     process of the decoder
@@ -27,6 +35,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         NOT be included in this list
 
     :returns: Contents of the secrets file
+
     """
 
     # Key created for encrypting frames in encoder;

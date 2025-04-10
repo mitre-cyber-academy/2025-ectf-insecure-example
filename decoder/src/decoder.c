@@ -1,10 +1,15 @@
-/**
- * @file    decoder.c
- * @author  Crypto Caballeros
- * @brief   eCTF 2025 Decoder's main source file 
- * @date    2025
- *
- */
+/*****FIU MITRE eCTF 2025********************************************
+*                                                                  *
+*    decoder.c                                                     *
+*                                                                  *
+*   Author: Crypto Caballeros                                      *
+*   Date: 2025                                                     *
+*   Description: This file processes and verifies incoming files   *
+*        to decode sattelite TV frames                             *
+*                                                                  *
+*******************************************************************/
+
+
 
 /*********************** INCLUDES *************************/
 #include <stdio.h>
@@ -39,6 +44,7 @@
 #define EMERGENCY_CHANNEL 0
 #define FRAME_SIZE 64
 #define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
+
 // This is a canary value so we can confirm whether this decoder has booted before
 #define FLASH_FIRST_BOOT 0xDEADBEEF
 
@@ -55,14 +61,22 @@
  *********** COMMUNICATION PACKET DEFINITIONS *************
  **********************************************************/
 
-#pragma pack(push, 1) // Tells the compiler not to pad the struct members
+
+// Tells the compiler not to pad the struct members
+#pragma pack(push, 1) 
 
 typedef struct {
     channel_id_t channel;
     timestamp_t timestamp;
-    uint8_t iv[16];                // Initialization Vector
-    uint8_t auth_tag[HASH_SIZE];   // Buffer for authentication
-    uint8_t data[];              // Holds data frame data
+
+// Initialization Vector
+    uint8_t iv[16];          
+    
+// Buffer for authentication
+    uint8_t auth_tag[HASH_SIZE];   
+
+// Holds data frame data
+    uint8_t data[];              
 } frame_packet_t;
 
 typedef struct {
@@ -70,7 +84,9 @@ typedef struct {
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
-    uint8_t signature[HASH_SIZE]; // Signature field from subscription signing
+
+// Signature field from subscription signing
+    uint8_t signature[HASH_SIZE]; 
 } subscription_update_packet_t;
 
 typedef struct {
@@ -84,7 +100,8 @@ typedef struct {
     channel_info_t channel_info[MAX_CHANNEL_COUNT];
 } list_response_t;
 
-#pragma pack(pop) // Tells the compiler to resume padding struct members
+// Tells the compiler to resume padding struct members
+#pragma pack(pop) 
 
 /**********************************************************
  ******************** TYPE DEFINITIONS ********************
@@ -98,7 +115,9 @@ typedef struct {
 } channel_status_t;
 
 typedef struct {
-    uint32_t first_boot; // if set to FLASH_FIRST_BOOT, device has booted before.
+
+    // if set to FLASH_FIRST_BOOT, device has booted before.
+    uint32_t first_boot; 
     channel_status_t subscribed_channels[MAX_CHANNEL_COUNT];
 } flash_entry_t;
 
@@ -117,12 +136,18 @@ timestamp_t prev_frame_timestamp = 0;
  ******************* UTILITY FUNCTIONS ********************
  **********************************************************/
 
-/** @brief Checks whether the decoder is subscribed to a given channel
- *
- *  @param channel The channel number to be checked.
- * 
- *  @return 1 if the the decoder is subscribed to the channel.  0 if not.
-*/
+
+/***********************************************************************
+
+@brief Checks whether the decoder is subscribed to a given channel
+ 
+@param channel The channel number to be checked.
+  
+@return 1 if the the decoder is subscribed to the channel.  0 if not.
+
+***********************************************************************/
+
+
 int is_subscribed(channel_id_t channel) {
     // Check if this is an emergency broadcast message
     if (channel == EMERGENCY_CHANNEL) {
@@ -143,18 +168,24 @@ int is_subscribed(channel_id_t channel) {
     return result;
 }
 
-/** @brief Checks whether a frame timestamp is valid for the decoder's subscription to a given channel
- *
- *  @param timestamp The timestamp to be checked.
- *  @param channel The channel number to be checked.
- * 
- *  @return 1 if the timestamp is valid for the channel.  0 if not.
-*/
+/********************************************************************************************************* 
+
+   @brief Checks whether a frame timestamp is valid for the decoder's subscription to a given channel
+ 
+   @param timestamp The timestamp to be checked.
+   @param channel The channel number to be checked.
+  
+   @return 1 if the timestamp is valid for the channel.  0 if not.
+
+*********************************************************************************************************/
+
 int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
+
     // Check if this is an emergency broadcast message
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
+
     // ensure timestamp is increasing monotonically
     if (timestamp <= prev_frame_timestamp) {
         STATUS_LED_ERROR();
@@ -178,22 +209,26 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
     return 0;
 }
 
-/** @brief Performs a constant-time comparison of two buffers
- * 
- * @param a First buffer
- * @param b Second buffer
- * @param len Length of buffers to compare
- * 
- * @return 0 if equal, non-zero otherwise
- */
+/*****************************************************************************
+
+ @brief Performs a constant-time comparison of two buffers
+  
+ @param a First buffer
+ @param b Second buffer
+ @param len Length of buffers to compare
+  
+ @return 0 if equal, non-zero otherwise
+
+ *******************************************************************************/
+
 static int constant_time_memcmp(const void* a, const void* b, size_t len) {
     const unsigned char* pa = (const unsigned char*)a;
     const unsigned char* pb = (const unsigned char*)b;
     unsigned char result = 0;
 
     for (size_t i = 0; i < len; i++) {
-        /* XOR each byte and OR the results together
-           If all bytes are equal, result will be 0 */
+        // XOR each byte and OR the results together
+       //  If all bytes are equal, result will be 0 
         result |= pa[i] ^ pb[i];
     }
     
@@ -205,10 +240,10 @@ static int constant_time_memcmp(const void* a, const void* b, size_t len) {
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
 
-/** @brief Lists out the actively subscribed channels over UART.
- *
- *  @return 0 if successful.
-*/
+/***************************************************************
+   @brief Lists out the actively subscribed channels over UART.
+    @return 0 if successful.
+***************************************************************/
 int list_channels() {
     list_response_t resp;
     pkt_len_t len;
@@ -232,22 +267,27 @@ int list_channels() {
 }
 
 
-/** @brief Updates the channel subscription for a subset of channels.
- *
- *  @param pkt_len The length of the incoming packet
- *  @param update A pointer to an array of channel_update structs,
- *      which contains the channel number, start, and end timestamps
- *      for each channel being updated.
- *
- *  @note This system is in little endian.
- *
- *  @return 0 upon success. -1 if error.
-*/
+/***************************************************************************************
+
+  @brief Updates the channel subscription for a subset of channels.
+
+  @param pkt_len The length of the incoming packet
+  @param update A pointer to an array of channel_update structs,
+      which contains the channel number, start, and end timestamps
+      for each channel being updated.
+
+  @note Take care to note that this system is little endian.
+
+  @return 0 upon success. -1 if error.
+
+***************************************************************************************/
+
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
 
-    // Channel 0 is always available, 
-    // not able to be subscribed to since it is an emergency channel
+    // channel 0 is always available, 
+   //  not able to be subscribed to since it is an emergency channel
+   
     if (update->channel == EMERGENCY_CHANNEL) {
         STATUS_LED_RED();
         print_error("Failed to update subscription - cannot subscribe to emergency channel\n");
@@ -323,8 +363,10 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // Verify the computed signature in constant time
     if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
-        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
+
+        // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP HASH
         MXC_Delay(MXC_DELAY_MSEC(5000));
+
         STATUS_LED_ERROR();
         print_error("Failed to update subscription - invalid signature\n");
         return -1;
@@ -343,6 +385,10 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
+
+        //IPS DELAYS 5 SECONDS ON MAX SUBSCRIPTIONS
+        MXC_Delay(MXC_DELAY_MSEC(5000));
+
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
@@ -359,13 +405,15 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 }
 
 
-/** @brief Processes a packet containing frame data.
- *
- *  @param pkt_len A pointer to the incoming packet.
- *  @param new_frame A pointer to the incoming packet.
- *
- *  @return 0 if successful.  -1 if data is from unsubscribed channel.
-*/
+/**********************************************************************
+  @brief Processes a packet containing frame data.
+ 
+  @param pkt_len A pointer to the incoming packet.
+  @param new_frame A pointer to the incoming packet.
+ 
+  @return 0 if successful.  -1 if data is from unsubscribed channel.
+
+*********************************************************************/
 int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     char output_buf[128] = {0};
 
@@ -452,6 +500,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         if (decrypted_size < 0) {
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
             MXC_Delay(MXC_DELAY_MSEC(5000));
+
             STATUS_LED_ERROR();
             print_error("Decryption failed\n");
             return -1;
@@ -459,6 +508,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         // Write decoded frame to host computer (TV)
         write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE);
         return 0;
+
     } else {
         STATUS_LED_ERROR();
         sprintf(
@@ -469,8 +519,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     }
 }
 
-/** @brief Initializes peripherals for system boot.
-*/
+// @brief Initializes peripherals for system boot.
 void init() {
     int ret;
 
