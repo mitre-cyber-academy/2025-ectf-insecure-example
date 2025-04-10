@@ -10,7 +10,6 @@
 *******************************************************************/
 
 
-
 /*********************** INCLUDES *************************/
 #include <stdio.h>
 #include <stdint.h>
@@ -66,38 +65,30 @@
 #pragma pack(push, 1) 
 
 typedef struct {
-    channel_id_t channel;
-    timestamp_t timestamp;
-
-// Initialization Vector
-    uint8_t iv[16];          
-    
-// Buffer for authentication
-    uint8_t auth_tag[HASH_SIZE];   
-
-// Holds data frame data
-    uint8_t data[];              
+    channel_id_t channel;             // Channel Number
+    timestamp_t timestamp;           // Frame's timestamp
+    uint8_t iv[16];                 // Initialization Vector
+    uint8_t auth_tag[HASH_SIZE];   // Buffer for authentication
+    uint8_t data[];               // Holds data frame data
 } frame_packet_t;
 
 typedef struct {
-    decoder_id_t decoder_id;
-    timestamp_t start_timestamp;
-    timestamp_t end_timestamp;
-    channel_id_t channel;
-
-// Signature field from subscription signing
-    uint8_t signature[HASH_SIZE]; 
+    decoder_id_t decoder_id;            // Decoder ID
+    timestamp_t start_timestamp;       // Start of subscription window
+    timestamp_t end_timestamp;        // End of subscription window
+    channel_id_t channel;            // Channel number to subscribe to
+    uint8_t signature[HASH_SIZE];   // Signature field from subscription signing
 } subscription_update_packet_t;
 
 typedef struct {
-    channel_id_t channel;
-    timestamp_t start;
-    timestamp_t end;
+    channel_id_t channel;     // Channel number for subscription listing
+    timestamp_t start;       // Start timestamp for subscription listing
+    timestamp_t end;        // End timestamp for subscription listing
 } channel_info_t;
 
 typedef struct {
-    uint32_t n_channels;
-    channel_info_t channel_info[MAX_CHANNEL_COUNT];
+    uint32_t n_channels;                             // Counts number of channels subscribed to
+    channel_info_t channel_info[MAX_CHANNEL_COUNT]; // Points to channel's info (no more than 8 channels)
 } list_response_t;
 
 // Tells the compiler to resume padding struct members
@@ -108,17 +99,15 @@ typedef struct {
  **********************************************************/
 
 typedef struct {
-    bool active;
-    channel_id_t id;
-    timestamp_t start_timestamp;
-    timestamp_t end_timestamp;
+    bool active;                      // Determines that channel is active
+    channel_id_t id;                 // Channel ID
+    timestamp_t start_timestamp;    // Channel's start time
+    timestamp_t end_timestamp;     // Channel's End time
 } channel_status_t;
 
 typedef struct {
-
-    // if set to FLASH_FIRST_BOOT, device has booted before.
-    uint32_t first_boot; 
-    channel_status_t subscribed_channels[MAX_CHANNEL_COUNT];
+    uint32_t first_boot;    // if set to FLASH_FIRST_BOOT, device has booted before.
+    channel_status_t subscribed_channels[MAX_CHANNEL_COUNT]; // Points to subscribed channel info
 } flash_entry_t;
 
 /**********************************************************
@@ -139,15 +128,13 @@ timestamp_t prev_frame_timestamp = 0;
 
 /***********************************************************************
 
-@brief Checks whether the decoder is subscribed to a given channel
+    @brief Checks whether the decoder is subscribed to a given channel
  
-@param channel The channel number to be checked.
+    @param channel The channel number to be checked.
   
-@return 1 if the the decoder is subscribed to the channel.  0 if not.
+    @return 1 if the the decoder is subscribed to the channel.  0 if not.
 
 ***********************************************************************/
-
-
 int is_subscribed(channel_id_t channel) {
     // Check if this is an emergency broadcast message
     if (channel == EMERGENCY_CHANNEL) {
@@ -178,7 +165,6 @@ int is_subscribed(channel_id_t channel) {
    @return 1 if the timestamp is valid for the channel.  0 if not.
 
 *********************************************************************************************************/
-
 int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
 
     // Check if this is an emergency broadcast message
@@ -220,7 +206,6 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
  @return 0 if equal, non-zero otherwise
 
  *******************************************************************************/
-
 static int constant_time_memcmp(const void* a, const void* b, size_t len) {
     const unsigned char* pa = (const unsigned char*)a;
     const unsigned char* pb = (const unsigned char*)b;
@@ -281,7 +266,6 @@ int list_channels() {
   @return 0 upon success. -1 if error.
 
 ***************************************************************************************/
-
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
 
@@ -364,7 +348,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Verify the computed signature in constant time
     if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
 
-        // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP HASH
+        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
         MXC_Delay(MXC_DELAY_MSEC(5000));
 
         STATUS_LED_ERROR();
@@ -385,10 +369,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
-
-        //IPS DELAYS 5 SECONDS ON MAX SUBSCRIPTIONS
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
@@ -498,6 +478,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
         decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
         secure_zero_memory(encryption_key, ENCRYPTION_KEY_SIZE); // Clear encryption key buffer
         if (decrypted_size < 0) {
+
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
             MXC_Delay(MXC_DELAY_MSEC(5000));
 

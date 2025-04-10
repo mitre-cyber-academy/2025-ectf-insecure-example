@@ -40,7 +40,7 @@
 int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, unsigned char* iv, uint8_t* plaintext);
  
 /*******************************************************************************************************
- *  @brief Hashes arbitrary-length data wolfSSL SHA-256
+ *  @brief Hashes arbitrary-length data using wolfSSL SHA-256
  *
  *  @param data A pointer to a buffer of length len containing the data
  *           to be hashed
@@ -50,7 +50,6 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, uns
  *
  *  @return 0 on success, non-zero for other error
  *******************************************************************************************************/
-
 int hash(void *data, size_t len, uint8_t *hash_out);
 
 /******************************************************************************************************************
@@ -68,8 +67,7 @@ int hash(void *data, size_t len, uint8_t *hash_out);
  *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
  *  where K' is the key padded to block size and m is the message
  *******************************************************************************************************************/
- 
- int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output);
+int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output);
 
 
 
