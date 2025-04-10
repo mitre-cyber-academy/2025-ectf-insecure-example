@@ -312,7 +312,7 @@ def generate_fallback_header(output_path):
 
 def main():
     """Main function to extract keys and generate C header"""
-    print("Starting key extraction process with XOR obfuscation...")
+    print("Starting key extraction process...")
     
     # Create output directory if it doesn't exist
     output_path = "/decoder/inc/secret_keys.h"
@@ -331,7 +331,7 @@ def main():
         if data:
             print(f"Successfully parsed {file_path} as JSON")
             if generate_key_header(data, output_path):
-                print("Key extraction with XOR obfuscation completed successfully!")
+                print("Key extraction completed successfully!")
                 return 0
     
     # If we get here, we failed to extract keys from any file
