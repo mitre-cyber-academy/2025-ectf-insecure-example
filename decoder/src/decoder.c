@@ -25,7 +25,6 @@
 #include "secret_keys.h"
 #include "user_settings.h"
 #include "simple_crypto.h"
-#include "trng.h"
 
 /**********************************************************
  ******************* PRIMITIVE TYPES **********************
