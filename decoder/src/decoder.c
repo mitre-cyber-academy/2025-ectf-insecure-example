@@ -2,7 +2,6 @@
  * @file    decoder.c
  * @author  Crypto Caballeros
  * @brief   eCTF 2025 Decoder's main source file 
- * @brief   eCTF 2025 Decoder's main source file 
  * @date    2025
  *
  */
@@ -240,14 +239,14 @@ int list_channels() {
  *      which contains the channel number, start, and end timestamps
  *      for each channel being updated.
  *
- *  @note Take care to note that this system is little endian.
+ *  @note This system is in little endian.
  *
  *  @return 0 upon success. -1 if error.
 */
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
 
-    // channel 0 is always available, 
+    // Channel 0 is always available, 
     // not able to be subscribed to since it is an emergency channel
     if (update->channel == EMERGENCY_CHANNEL) {
         STATUS_LED_RED();
@@ -257,16 +256,15 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // Verify this update is for this decoder
     if (update->decoder_id != DECODER_ID) {
-        // IPS DELAYS 5 SECONDS ON INVALID DECODER
         STATUS_LED_ERROR();
         print_error("Failed to update subscription - wrong decoder ID\n");
         return -1;
     }
 
-    // Create a buffer with the subscription data to verify signature
+    // Create a buffer with the subscription data to compare with computed signature
     uint8_t verify_buffer[sizeof(decoder_id_t) + sizeof(timestamp_t) * 2 + sizeof(channel_id_t)];
-    uint8_t computed_hash[HASH_SIZE];
-    uint8_t device_key[HASH_SIZE];
+    uint8_t computed_hash[HASH_SIZE]; // Buffer for computed signature
+    uint8_t device_key[HASH_SIZE]; // Buffer for device key
 
     // Copy data into verification buffer (all data except the siganture)
     memcpy(verify_buffer, &update->decoder_id, sizeof(decoder_id_t));
@@ -293,11 +291,13 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     memset(device_key_input, 0, device_key_input_size);
     memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE); // Copy data
     memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, device_id_bytes, sizeof(decoder_id_t));
+    secure_zero_memory(key_bytes, SUBSCRIPTION_KEY_SIZE);
 
     // Hash to create device key (master key + device ID)
     memset(device_key, 0, HASH_SIZE);
     int hash_result = hash(device_key_input, device_key_input_size, device_key);
-
+    // Securely clear the key from memory when done
+    secure_zero_memory(device_key_input, device_key_input_size);
     if (hash_result != 0) {
         char error_buf[64];
         sprintf(error_buf, "WolfSSL hash returned error: %d", hash_result);
@@ -319,11 +319,9 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         return -1;
     }
 
-    // Securely clear the key from memory when done
-    secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
-    secure_clear(device_key_input, device_key_input_size);
 
-    // Verify the signature in constant time
+
+    // Verify the computed signature in constant time
     if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
         // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
         MXC_Delay(MXC_DELAY_MSEC(5000));
@@ -345,8 +343,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
-        //IPS DELAYS 5 SECONDS ON MAX SUBSCRIPTIONS
-        MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
@@ -400,7 +396,9 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     unsigned char *ciphertext = new_frame->data; // Extract Ciphertext
     unsigned char *auth_tag = new_frame->auth_tag; // Extract auth_tag (HMAC)
 
-    // Verify HMAC first
+    // FIRST, VERIFY HMAC
+
+    // Create HMAC buffers
     uint8_t computed_hmac[HASH_SIZE];
     uint8_t hmac_input[sizeof(channel_id_t) + sizeof(timestamp_t) + 16 + ciphertext_size];
 
@@ -410,53 +408,56 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t), iv, 16);
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t) + 16, ciphertext, ciphertext_size);
 
-    // Get encryption key from secrets
-    uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
-    load_encryption_key(encryption_key);
-
     // Get MAC key from secrets
     uint8_t mac_key [MAC_KEY_SIZE];
     load_mac_key(mac_key);
 
     // Compute HMAC
     compute_hmac(mac_key, MAC_KEY_SIZE, hmac_input, sizeof(hmac_input), computed_hmac);
+    secure_zero_memory(mac_key, MAC_KEY_SIZE); // Clear mac key buffer
 
     // Verify HMAC in constant time
     if (constant_time_memcmp(computed_hmac, auth_tag, HASH_SIZE) != 0) {
-        secure_clear(mac_key, MAC_KEY_SIZE);
+        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         print_error("Failed to authenticate frame - invalid signature\n");
         return -1;
     } 
-    secure_clear(mac_key, MAC_KEY_SIZE); // clear mac key buffer
     
-    //CHECKS IF SECURITY CHECKS PASSED
+    //CHECKS IF OTHER SECURITY CHECKS PASS
 
     // Check that we are subscribed to the channel...
     if (is_subscribed(channel)) {
+        // Check that frame timestamp is valid
         if (timestamp_valid(timestamp, channel)) {
             prev_frame_timestamp = timestamp;
         } else {
-            //timestamp errors are printed in timestamp_valid()
+            //timestamp errors are printed in timestamp_valid() function
             return -1;
         }
 
-        // Before writing the bytes, decrypt
+        // FINALLY, DECRYPT
+
+        // Create decryption buffer
         uint8_t decrypted_data[FRAME_SIZE];
-        int decrypted_size;
+        int decrypted_size; // Tracks decryption process's completion
+
+        // Get encryption key from secrets
+        uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
+        load_encryption_key(encryption_key);
 
         decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
+        secure_zero_memory(encryption_key, ENCRYPTION_KEY_SIZE); // Clear encryption key buffer
         if (decrypted_size < 0) {
-            secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); // clear encryption key
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
             MXC_Delay(MXC_DELAY_MSEC(5000));
             STATUS_LED_ERROR();
             print_error("Decryption failed\n");
             return -1;
         }
-        secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); // clear encryption key
-        write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE); // 
+        // Write decoded frame to host computer (TV)
+        write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE);
         return 0;
     } else {
         STATUS_LED_ERROR();
@@ -511,6 +512,7 @@ void init() {
         while (1);
     }
 
+    // Checks if decoder ID is not the correct length (<8)
     if (sizeof(decoder_id_t) > MAX_DECODER_ID_SIZE) {
         MXC_Delay(MXC_DELAY_MSEC(5000));
         print_error("Warning: Unexpected device ID size detected\n");
