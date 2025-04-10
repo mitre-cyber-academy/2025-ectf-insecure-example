@@ -1,9 +1,13 @@
-/** @file "simple_crypto.h"
- *  @author Crypto Caballeros
- *  @brief Header file housing function prototypes for FIU's 2025 attempt at MITRE's eCTF
- *  @date 2025
- *
-*/
+/*****FIU MITRE eCTF 2025********************************************
+*                                                                  *
+*    simple_crypto.c                                               *
+*                                                                  *
+*   Author: Crypto Caballeros                                      *
+*   Date: 2025                                                     *
+*   Description: Source file holding cryptographic efforts         *
+*        preformed by FIU's 2025 eCTF team                         *
+*                                                                  *
+*******************************************************************/
 
 
 #ifndef ECTF_CRYPTO_HW_H
@@ -22,7 +26,8 @@
  
 /******************************** FUNCTION PROTOTYPES ********************************/
 
-/** @brief AES-256 Decryption function using wolfSSL
+/******************************************************************************************************
+ *  @brief AES-256 Decryption function using wolfSSL
  * 
  *  @param ciphertext A pointer to a buffer of length ciphertext_len containing ciphertext from encoder
  *  @param ciphertext_len Legth of ciphertext
@@ -31,10 +36,11 @@
  *  @param plaintext A pointer to a buffer containing the output of decryption, plaintext
  * 
  *  @return plaintext_len for error messages
- */
+ *******************************************************************************************************/
 int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, unsigned char* iv, uint8_t* plaintext);
  
-/** @brief Hashes arbitrary-length data wolfSSL SHA-256
+/*******************************************************************************************************
+ *  @brief Hashes arbitrary-length data wolfSSL SHA-256
  *
  *  @param data A pointer to a buffer of length len containing the data
  *           to be hashed
@@ -43,10 +49,12 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, uns
  *           hash output will be written to
  *
  *  @return 0 on success, non-zero for other error
- */
+ *******************************************************************************************************/
+
 int hash(void *data, size_t len, uint8_t *hash_out);
 
-/** @brief Creates HMAC object using wolfSSL hash function
+/******************************************************************************************************************
+ *  @brief Creates HMAC object using wolfSSL hash function
  * 
  *  @param key A pointer to a buffer of length key_len containing key for HMAC
  *  @param key_len The length of the key to be used for HMAC
@@ -59,7 +67,8 @@ int hash(void *data, size_t len, uint8_t *hash_out);
  *  @note Standard HMAC implementation (H is the hash function, K is the key)
  *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
  *  where K' is the key padded to block size and m is the message
- */
+ *******************************************************************************************************************/
+ 
  int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output);
 
 
