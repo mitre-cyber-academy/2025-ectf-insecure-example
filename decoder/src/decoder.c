@@ -10,7 +10,6 @@
 *******************************************************************/
 
 
-
 /*********************** INCLUDES *************************/
 #include <stdio.h>
 #include <stdint.h>
@@ -67,38 +66,30 @@
 #pragma pack(push, 1) 
 
 typedef struct {
-    channel_id_t channel;
-    timestamp_t timestamp;
-
-// Initialization Vector
-    uint8_t iv[16];          
-    
-// Buffer for authentication
-    uint8_t auth_tag[HASH_SIZE];   
-
-// Holds data frame data
-    uint8_t data[];              
+    channel_id_t channel;             // Channel Number
+    timestamp_t timestamp;           // Frame's timestamp
+    uint8_t iv[16];                 // Initialization Vector
+    uint8_t auth_tag[HASH_SIZE];   // Buffer for authentication
+    uint8_t data[];               // Holds data frame data
 } frame_packet_t;
 
 typedef struct {
-    decoder_id_t decoder_id;
-    timestamp_t start_timestamp;
-    timestamp_t end_timestamp;
-    channel_id_t channel;
-
-// Signature field from subscription signing
-    uint8_t signature[HASH_SIZE]; 
+    decoder_id_t decoder_id;            // Decoder ID
+    timestamp_t start_timestamp;       // Start of subscription window
+    timestamp_t end_timestamp;        // End of subscription window
+    channel_id_t channel;            // Channel number to subscribe to
+    uint8_t signature[HASH_SIZE];   // Signature field from subscription signing
 } subscription_update_packet_t;
 
 typedef struct {
-    channel_id_t channel;
-    timestamp_t start;
-    timestamp_t end;
+    channel_id_t channel;     // Channel number for subscription listing
+    timestamp_t start;       // Start timestamp for subscription listing
+    timestamp_t end;        // End timestamp for subscription listing
 } channel_info_t;
 
 typedef struct {
-    uint32_t n_channels;
-    channel_info_t channel_info[MAX_CHANNEL_COUNT];
+    uint32_t n_channels;                             // Counts number of channels subscribed to
+    channel_info_t channel_info[MAX_CHANNEL_COUNT]; // Points to channel's info (no more than 8 channels)
 } list_response_t;
 
 // Tells the compiler to resume padding struct members
@@ -109,17 +100,15 @@ typedef struct {
  **********************************************************/
 
 typedef struct {
-    bool active;
-    channel_id_t id;
-    timestamp_t start_timestamp;
-    timestamp_t end_timestamp;
+    bool active;                      // Determines that channel is active
+    channel_id_t id;                 // Channel ID
+    timestamp_t start_timestamp;    // Channel's start time
+    timestamp_t end_timestamp;     // Channel's End time
 } channel_status_t;
 
 typedef struct {
-
-    // if set to FLASH_FIRST_BOOT, device has booted before.
-    uint32_t first_boot; 
-    channel_status_t subscribed_channels[MAX_CHANNEL_COUNT];
+    uint32_t first_boot;    // if set to FLASH_FIRST_BOOT, device has booted before.
+    channel_status_t subscribed_channels[MAX_CHANNEL_COUNT]; // Points to subscribed channel info
 } flash_entry_t;
 
 /**********************************************************
@@ -140,15 +129,13 @@ timestamp_t prev_frame_timestamp = 0;
 
 /***********************************************************************
 
-@brief Checks whether the decoder is subscribed to a given channel
+    @brief Checks whether the decoder is subscribed to a given channel
  
-@param channel The channel number to be checked.
+    @param channel The channel number to be checked.
   
-@return 1 if the the decoder is subscribed to the channel.  0 if not.
+    @return 1 if the the decoder is subscribed to the channel.  0 if not.
 
 ***********************************************************************/
-
-
 int is_subscribed(channel_id_t channel) {
     // Check if this is an emergency broadcast message
     if (channel == EMERGENCY_CHANNEL) {
@@ -179,7 +166,6 @@ int is_subscribed(channel_id_t channel) {
    @return 1 if the timestamp is valid for the channel.  0 if not.
 
 *********************************************************************************************************/
-
 int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
 
     // Check if this is an emergency broadcast message
@@ -221,7 +207,6 @@ int timestamp_valid(timestamp_t timestamp, channel_id_t channel) {
  @return 0 if equal, non-zero otherwise
 
  *******************************************************************************/
-
 static int constant_time_memcmp(const void* a, const void* b, size_t len) {
     const unsigned char* pa = (const unsigned char*)a;
     const unsigned char* pb = (const unsigned char*)b;
@@ -337,7 +322,6 @@ int list_channels() {
   @return 0 upon success. -1 if error.
 
 ***************************************************************************************/
-
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update) {
     int i;
 
@@ -357,10 +341,10 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         return -1;
     }
 
-    // Create a buffer with the subscription data to verify signature
+    // Create a buffer with the subscription data to compare with computed signature
     uint8_t verify_buffer[sizeof(decoder_id_t) + sizeof(timestamp_t) * 2 + sizeof(channel_id_t)];
-    uint8_t computed_hash[HASH_SIZE];
-    uint8_t device_key[HASH_SIZE];
+    uint8_t computed_hash[HASH_SIZE]; // Buffer for computed signature
+    uint8_t device_key[HASH_SIZE]; // Buffer for device key
 
     // Copy data into verification buffer (all data except the siganture)
     memcpy(verify_buffer, &update->decoder_id, sizeof(decoder_id_t));
@@ -391,12 +375,15 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     memset(device_key_input, 0, device_key_input_size);
     memcpy(device_key_input, key_bytes, SUBSCRIPTION_KEY_SIZE); // Copy data
     memcpy(device_key_input + SUBSCRIPTION_KEY_SIZE, device_id_bytes, sizeof(decoder_id_t));
+    secure_zero_memory(key_bytes, SUBSCRIPTION_KEY_SIZE);
 
     // Hash to create device key (master key + device ID)
     memset(device_key, 0, HASH_SIZE);
     int hash_result = hash(device_key_input, device_key_input_size, device_key);
     add_power_noise();
 
+    // Securely clear the key from memory when done
+    secure_zero_memory(device_key_input, device_key_input_size);
     if (hash_result != 0) {
         add_power_noise();
         char error_buf[64];
@@ -421,15 +408,12 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         return -1;
     }
 
-    // Securely clear the key from memory when done
     add_power_noise();
-    secure_clear(key_bytes, SUBSCRIPTION_KEY_SIZE);
-    secure_clear(device_key_input, device_key_input_size);
 
-    // Verify the signature in constant time
+    // Verify the computed signature in constant time
     if (constant_time_memcmp(computed_hash, update->signature, HASH_SIZE) != 0) {
 
-        // IPS DELAYS 5 SECONDS ON INVALID TIMESTAMP HASH
+        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
         MXC_Delay(MXC_DELAY_MSEC(5000));
 
         STATUS_LED_ERROR();
@@ -450,10 +434,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT) {
-
-        //IPS DELAYS 5 SECONDS ON MAX SUBSCRIPTIONS
-        MXC_Delay(MXC_DELAY_MSEC(5000));
-
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
         return -1;
@@ -509,8 +489,10 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     unsigned char *ciphertext = new_frame->data; // Extract Ciphertext
     unsigned char *auth_tag = new_frame->auth_tag; // Extract auth_tag (HMAC)
 
-    // Verify HMAC 
+    // FIRST, VERIFY HMAC
     add_power_noise();
+    // Create HMAC buffers
+    
     uint8_t computed_hmac[HASH_SIZE];
     uint8_t hmac_input[sizeof(channel_id_t) + sizeof(timestamp_t) + 16 + ciphertext_size];
 
@@ -521,12 +503,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t), iv, 16);
     memcpy(hmac_input + sizeof(channel_id_t) + sizeof(timestamp_t) + 16, ciphertext, ciphertext_size);
 
-    // Get encryption key from secrets
-    add_power_noise();
-    uint8_t encryption_key[ENCRYPTION_KEY_SIZE];
-    load_encryption_key(encryption_key);
-
-
     // Get MAC key from secrets
     add_power_noise();
     uint8_t mac_key [MAC_KEY_SIZE];
@@ -535,42 +511,41 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
 
     // Compute HMAC
     compute_hmac(mac_key, MAC_KEY_SIZE, hmac_input, sizeof(hmac_input), computed_hmac);
-    add_power_noise();
+    secure_zero_memory(mac_key, MAC_KEY_SIZE); // Clear mac key buffer
+
     // Verify HMAC in constant time
     if (constant_time_memcmp(computed_hmac, auth_tag, HASH_SIZE) != 0) {
-        add_power_noise();
-        secure_clear(mac_key, MAC_KEY_SIZE);
+        // IPS DELAYS 5 SECONDS ON INVALID SIGNATURE
         MXC_Delay(MXC_DELAY_MSEC(5000));
         STATUS_LED_ERROR();
         print_error("Failed to authenticate frame - invalid signature\n");
         return -1;
-    }
-    add_power_noise();
-    secure_clear(mac_key, MAC_KEY_SIZE); // clear mac key buffer
+    } 
     
-    //CHECKS IF SECURITY CHECKS PASSED
+    //CHECKS IF OTHER SECURITY CHECKS PASS
 
     // Check that we are subscribed to the channel...
     if (is_subscribed(channel)) {
+        // Check that frame timestamp is valid
         if (timestamp_valid(timestamp, channel)) {
             prev_frame_timestamp = timestamp;
         } else {
-            //timestamp errors are printed in timestamp_valid()
+            //timestamp errors are printed in timestamp_valid() function
             return -1;
         }
 
-        // Before writing the bytes, decrypt
+        // FINALLY, DECRYPT
+
+        // Create decryption buffer
         uint8_t decrypted_data[FRAME_SIZE];
         int decrypted_size;
 
         add_power_noise();
+
         decrypted_size = aes_decrypt(ciphertext, ciphertext_size, encryption_key, iv, decrypted_data);
+        secure_zero_memory(encryption_key, ENCRYPTION_KEY_SIZE); // Clear encryption key buffer
         if (decrypted_size < 0) {
-
-            // clear encryption key
             add_power_noise();
-            secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); 
-
             // IPS DELAYS 5 SECONDS ON DECRYPTION FAILURE
             MXC_Delay(MXC_DELAY_MSEC(5000));
 
@@ -578,11 +553,9 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame) {
             print_error("Decryption failed\n");
             return -1;
         }
-
-        // clear encryption key
         add_power_noise();
-        secure_clear(encryption_key, ENCRYPTION_KEY_SIZE); 
-        write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE); // 
+        // Write decoded frame to host computer (TV)
+        write_packet(DECODE_MSG, decrypted_data, FRAME_SIZE);
         return 0;
 
     } else {
@@ -638,6 +611,7 @@ void init() {
         while (1);
     }
 
+    // Checks if decoder ID is not the correct length (<8)
     if (sizeof(decoder_id_t) > MAX_DECODER_ID_SIZE) {
         MXC_Delay(MXC_DELAY_MSEC(5000));
         print_error("Warning: Unexpected device ID size detected\n");

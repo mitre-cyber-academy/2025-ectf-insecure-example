@@ -11,7 +11,7 @@
 
 
 
-/******************INCLUDES*************************************** */
+/****************************INCLUDES*****************************/
 
 #include <stdint.h>
 #include <string.h>
@@ -34,7 +34,6 @@
  
   @return plaintext_len for error messages
  ************************************************************************************************************/
-
 int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, unsigned char* iv, uint8_t* plaintext) {
     Aes aes;
     int ret;
@@ -58,11 +57,21 @@ int aes_decrypt(uint8_t* ciphertext, int ciphertext_len, unsigned char* key, uns
     return plaintext_len;
 }
  
-/** @brief Hash data using wolfSSL SHA-256
- */
+/*******************************************************************************************************
+ *  @brief Hashes arbitrary-length data using wolfSSL SHA-256
+ *
+ *  @param data A pointer to a buffer of length len containing the data
+ *           to be hashed
+ *  @param len The length of the data to hash
+ *  @param hash_out A pointer to a buffer of length HASH_SIZE (32 bytes) where the resulting
+ *           hash output will be written to
+ *
+ *  @return 0 on success, non-zero for other error
+ *******************************************************************************************************/
 int hash(void *data, size_t len, uint8_t *hash_out) {
     char debug_buf[128];
-     
+    
+    // Check that inputs are valid
     if (data == NULL) {
         print_debug("NULL data pointer passed to hash");
         return -1;
@@ -120,7 +129,6 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
  *  HMAC(K,m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
  *  where K' is the key padded to block size and m is the message
  ********************************************************************************************************/
- 
 int compute_hmac(uint8_t *key, size_t key_len, uint8_t *message, size_t message_len, uint8_t *hmac_output) {
     uint8_t k_prime[HMAC_BLOCK_SIZE];
     uint8_t k_opad[HMAC_BLOCK_SIZE];
