@@ -35,6 +35,7 @@ IPATH += wolfssl
 # Minimal wolfSSL settings - rest of settings in user_settings.h
 PROJ_CFLAGS += -DWOLFSSL_USER_SETTINGS
 PROJ_CFLAGS += -DNO_WOLFSSL_DIR
+PROJ_CFLAGS += -DNO_INLINE
 
 # Hardware settings
 PROJ_CFLAGS += -DUSE_HW_CRYPTO
